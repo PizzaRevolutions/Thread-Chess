@@ -35,6 +35,15 @@ def gestisciClient(client_socket, indirizzo, page):
 def main(page: ft.Page):
     page.title = "Server"
     page.vertical_alignment = ft.MainAxisAlignment.CENTER
+
+    # Crea un widget immagine usando il file dalla cartella 'assets'
+    img = ft.Image(
+        src="chess.png",  # NON serve scrivere "assets/flet_logo.png"
+        width=100,
+        height=100,
+        fit=ft.ImageFit.CONTAIN, # Adatta l'immagine mantenendo le proporzioni
+    )
+    page.add(img)
         
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server.bind((HOST, 5000))
@@ -45,4 +54,4 @@ def main(page: ft.Page):
         client_socket, addr = server.accept()
         thread = threading.Thread(target=gestisciClient, args=(client_socket, addr, page))
         thread.start()
-ft.app(main)
+ft.app(target=main, assets_dir="assets")
