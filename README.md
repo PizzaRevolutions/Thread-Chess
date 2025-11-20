@@ -1,81 +1,91 @@
-# Es07 app
+# ♟️ Scacchi Online Multiplayer (Python + Flet)
 
-## Run the app
+Un'applicazione completa per giocare a scacchi in multiplayer via rete locale (TCP/IP). Il progetto implementa un'architettura **Client-Server**, utilizzando **Flet** per l'interfaccia grafica moderna e **Multithreading** per la gestione delle connessioni simultanee.
 
-### uv
+## 🚀 Caratteristiche Principali
 
-Run as a desktop app:
+* **Architettura Client-Server:** Utilizzo di Socket TCP per la comunicazione in tempo reale.
+* **Interfaccia Grafica (GUI):** Realizzata con **Flet**, supporta il **Drag and Drop** dei pezzi.
+* **Multithreading:**
+  * Il Server gestisce ogni client in un thread separato.
+  * Il Client utilizza un thread secondario per ascoltare le mosse dell'avversario senza bloccare l'interfaccia.
+* **Regole Scacchistiche:** Supporto completo (Arrocco, En Passant, Promozione) grazie a `python-chess`.
 
-```
-uv run flet run
-```
+## 🛠️ Installazione
 
-Run as a web app:
+1. **Prerequisiti:** Assicurati di avere Python installato (versione 3.7 o superiore).
+2. **Crea un Virtual Environment (opzionale ma consigliato):**
+   ```bash
+   python -m venv .venv
+   source .venv/bin/activate  # Su Mac/Linux
+   # .venv\Scripts\activate   # Su Windows
+   ```
+3. **Installa le dipendenze:**
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-```
-uv run flet run --web
-```
+## ▶️ Come Avviare il Gioco
 
-### Poetry
+Per giocare, devi avviare prima il server e poi due client (uno per giocatore).
 
-Install dependencies from `pyproject.toml`:
+### 1. Avviare il Server
 
-```
-poetry install
-```
+Apri un terminale, entra nella cartella `src` ed esegui:
 
-Run as a desktop app:
-
-```
-poetry run flet run
-```
-
-Run as a web app:
-
-```
-poetry run flet run --web
-```
-
-For more details on running the app, refer to the [Getting Started Guide](https://flet.dev/docs/getting-started/).
-
-## Build the app
-
-### Android
-
-```
-flet build apk -v
+```bash
+flet run server.py
 ```
 
-For more details on building and signing `.apk` or `.aab`, refer to the [Android Packaging Guide](https://flet.dev/docs/publish/android/).
+*Vedrai il messaggio "SERVER AVVIATO SU localhost:5000".*
 
-### iOS
+### 2. Avviare il Primo Giocatore (Client)
 
-```
-flet build ipa -v
-```
+Apri un **secondo** terminale, entra in `src` ed esegui:
 
-For more details on building and signing `.ipa`, refer to the [iOS Packaging Guide](https://flet.dev/docs/publish/ios/).
-
-### macOS
-
-```
-flet build macos -v
+```bash
+flet run
 ```
 
-For more details on building macOS package, refer to the [macOS Packaging Guide](https://flet.dev/docs/publish/macos/).
+* Inserisci un Nickname e clicca su "Entra in Coda".
+* Vedrai una schermata di attesa.
 
-### Linux
+### 3. Avviare il Secondo Giocatore
 
-```
-flet build linux -v
-```
+Apri un **terzo** terminale ed esegui di nuovo il client:
 
-For more details on building Linux package, refer to the [Linux Packaging Guide](https://flet.dev/docs/publish/linux/).
-
-### Windows
-
-```
-flet build windows -v
+```bash
+flet run
 ```
 
-For more details on building Windows package, refer to the [Windows Packaging Guide](https://flet.dev/docs/publish/windows/).
+* Inserisci un altro Nickname e connettiti.
+* **La partita inizierà automaticamente!** Il server assegnerà casualmente il Bianco e il Nero.
+
+## 🧠 Dettagli Tecnici
+
+### Gestione Socket e Threading
+
+Il sistema utilizza i socket bloccanti. Per evitare che l'interfaccia grafica (GUI) si blocchi in attesa di un messaggio di rete:
+
+* **Server:** Usa `threading.Thread` per ogni connessione `accept()`, permettendo a più client di connettersi contemporaneamente.
+* **Client:** Lancia un thread `daemon` (`network_loop`) che esegue un ciclo infinito di `socket.recv()`. Quando arriva un messaggio, aggiorna la GUI chiamando `page.update()`.
+
+### Logica Server-Authoritative
+
+A differenza di sistemi peer-to-peer semplici, qui i client non si fidano ciecamente l'uno dell'altro.
+
+1. Il Client A invia una mossa ("e2e4").
+2. Il Server riceve "e2e4", controlla se è legale sulla sua copia della scacchiera interna.
+3. Se valida: il Server aggiorna il suo stato e inoltra la mossa al Client B.
+4. Se invalida: il Server risponde con un errore e la mossa viene annullata.
+
+## 📋 Requisiti (requirements.txt)
+
+```text
+flet
+python-chess
+```
+
+---
+
+*Progetto realizzato a scopo didattico per lo studio di Python, Socket Programming e GUI Development.*
