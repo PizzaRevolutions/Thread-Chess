@@ -10,8 +10,7 @@ class ChessClient:
     def __init__(self, page: ft.Page):
         self.page = page
         self.page.title = "Client Scacchi"
-        # FIX COLORE: Uso codice HEX invece di ft.colors
-        self.page.bgcolor = "#263238" 
+        self.page.bgcolor = "#263238"
         self.page.vertical_alignment = ft.MainAxisAlignment.CENTER
         self.page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
         
@@ -19,12 +18,11 @@ class ChessClient:
         self.board = chess.Board()
         self.my_color = None 
         self.is_my_turn = False
-        
         self.squares_ui = {} 
 
-        # UI Components
+        # UI Login
         self.nickname_input = ft.TextField(label="Nickname", width=200, text_align=ft.TextAlign.CENTER)
-        self.status_text = ft.Text("Inserisci il nome per giocare", size=20)
+        self.status_lbl = ft.Text("", size=20, weight="bold")
         
         self.show_login()
 
@@ -40,12 +38,7 @@ class ChessClient:
 
     def show_waiting(self):
         self.page.clean()
-        self.page.add(
-            ft.Column([
-                ft.ProgressRing(),
-                ft.Text("In attesa di un avversario...", size=20)
-            ], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER)
-        )
+        self.page.add(ft.Column([ft.ProgressRing(), ft.Text("In attesa...", size=20)], alignment=ft.MainAxisAlignment.CENTER))
         self.page.update()
 
     def connect_to_server(self, e):
@@ -54,7 +47,6 @@ class ChessClient:
             self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.sock.connect((HOST, PORT))
             self.sock.send(self.nickname_input.value.encode())
-            
             self.show_waiting()
             threading.Thread(target=self.network_loop, daemon=True).start()
         except Exception as err:
@@ -63,140 +55,112 @@ class ChessClient:
             self.page.update()
 
     def network_loop(self):
-        """Ascolta i messaggi dal server"""
         while True:
             try:
                 data = self.sock.recv(1024).decode()
                 if not data: break
                 
                 if data.startswith("START|"):
-                    color_str = data.split("|")[1]
-                    self.my_color = chess.WHITE if color_str == "WHITE" else chess.BLACK
+                    color = data.split("|")[1]
+                    self.my_color = chess.WHITE if color == "WHITE" else chess.BLACK
                     self.is_my_turn = (self.my_color == chess.WHITE)
-                    print(f"Partita iniziata! Io sono: {color_str}")
                     self.build_game_ui()
                 
+                elif data.startswith("ERROR|"):
+                    err_msg = data.split("|")[1]
+                    print(f"ERRORE DAL SERVER: {err_msg}")
+                    # Se il server dice errore, probabilmente siamo desincronizzati.
+                    # Qui potremmo richiedere la scacchiera intera, ma per ora stampiamo solo.
+                    
                 else:
+                    # È una mossa dell'avversario (es. "e2e4")
                     self.handle_opponent_move(data)
                     
             except Exception as e:
-                print(f"Errore rete: {e}")
+                print(f"Disconnesso: {e}")
                 break
 
     def build_game_ui(self):
         self.page.clean()
-        
-        # Sfondo scacchiera
         board_img = ft.Image(src="board.png", width=400, height=400, fit=ft.ImageFit.FILL)
+        grid_col = ft.Column(spacing=0, width=400, height=400)
         
-        # Griglia logica
-        grid_column = ft.Column(spacing=0, width=400, height=400)
-        
+        # Orientamento scacchiera
         ranks = range(7, -1, -1) if self.my_color == chess.WHITE else range(8)
         files = range(8) if self.my_color == chess.WHITE else range(7, -1, -1)
 
         for rank in ranks:
-            row_controls = []
+            row = []
             for file in files:
-                square_index = chess.square(file, rank)
-                square_name = chess.square_name(square_index)
-                
-                piece_container = ft.Container(width=50, height=50, alignment=ft.alignment.center)
-                
-                drop_target = ft.DragTarget(
-                    group="chess",
-                    content=piece_container,
-                    on_accept=self.on_drop,
-                    data=square_name
-                )
-                
-                self.squares_ui[square_name] = piece_container
-                row_controls.append(drop_target)
-            
-            grid_column.controls.append(ft.Row(controls=row_controls, spacing=0))
+                sq_name = chess.square_name(chess.square(file, rank))
+                container = ft.Container(width=50, height=50, alignment=ft.alignment.center)
+                target = ft.DragTarget(group="chess", content=container, on_accept=self.on_drop, data=sq_name)
+                self.squares_ui[sq_name] = container
+                row.append(target)
+            grid_col.controls.append(ft.Row(controls=row, spacing=0))
 
-        game_area = ft.Stack([board_img, grid_column], width=400, height=400)
+        self.status_lbl.value = "Tocca a te!" if self.is_my_turn else "Attendi avversario..."
         
-        info_text = "Tocca a te! (Bianco)" if self.my_color == chess.WHITE else "Attendi il bianco..."
-        self.status_lbl = ft.Text(info_text, size=20, weight="bold")
-
         self.page.add(
             self.status_lbl,
-            # FIX COLORE: Uso "white" invece di ft.colors.WHITE
-            ft.Container(game_area, border=ft.border.all(2, "white")),
-            ft.Text(f"Tu giochi con i: {'BIANCHI' if self.my_color == chess.WHITE else 'NERI'}")
+            ft.Container(ft.Stack([board_img, grid_col], width=400, height=400), border=ft.border.all(2, "white")),
+            ft.Text(f"Tu sei: {'BIANCO' if self.my_color == chess.WHITE else 'NERO'}")
         )
-        
         self.update_pieces()
         self.page.update()
 
     def update_pieces(self):
         board_map = self.board.piece_map()
-        
-        for square_name, container in self.squares_ui.items():
-            sq_idx = chess.parse_square(square_name)
-            piece = board_map.get(sq_idx)
-            
-            container.content = None 
-            
+        for sq_name, container in self.squares_ui.items():
+            piece = board_map.get(chess.parse_square(sq_name))
+            container.content = None
             if piece:
-                img_name = f"{'w' if piece.color else 'b'}{piece.symbol().upper()}.png"
-                img = ft.Image(src=img_name, width=40, height=40)
-                
+                img_src = f"{'w' if piece.color else 'b'}{piece.symbol().upper()}.png"
+                img = ft.Image(src=img_src, width=40, height=40)
                 if piece.color == self.my_color:
-                    draggable = ft.Draggable(
-                        group="chess",
-                        content=img,
-                        content_when_dragging=ft.Container(content=img, opacity=0.5),
-                        data=square_name
-                    )
-                    container.content = draggable
+                    container.content = ft.Draggable(group="chess", content=img, content_when_dragging=ft.Container(content=img, opacity=0.5), data=sq_name)
                 else:
-                    container.content = img 
-
+                    container.content = img
         self.page.update()
 
-    # FIX EVENTO: Aggiornato a ft.DragTargetEvent
     def on_drop(self, e: ft.DragTargetEvent):
-        if not self.is_my_turn:
-            print("Non è il tuo turno!")
-            return
-
-        # Recupero i dati. In alcune versioni src_id non basta, 
-        # ma proviamo a recuperare il controllo draggable dalla pagina
+        # 1. Controllo preliminare Client
+        if not self.is_my_turn: return
+        
         src = self.page.get_control(e.src_id).data
-        dst = e.control.data 
+        dst = e.control.data
         
         try:
+            # Logica gestione promozione semplificata (sempre Regina)
             move = self.board.find_move(chess.parse_square(src), chess.parse_square(dst))
         except:
-            try:
-                move = chess.Move.from_uci(f"{src}{dst}q")
-            except:
-                move = None
+            try: move = chess.Move.from_uci(f"{src}{dst}q")
+            except: move = None
 
+        # 2. Se legale localmente, invia al server
         if move and move in self.board.legal_moves:
+            # Eseguiamo localmente "con fiducia" (Optimistic UI update)
             self.board.push(move)
             self.update_pieces()
-            self.sock.send(move.uci().encode())
-            
             self.is_my_turn = False
             self.status_lbl.value = "Turno avversario..."
             self.page.update()
+            
+            # INVIO AL SERVER
+            self.sock.send(move.uci().encode())
         else:
-            print("Mossa non valida")
-            self.update_pieces()
+            self.update_pieces() # Reset visuale mossa invalida
 
     def handle_opponent_move(self, uci_move):
         try:
             move = chess.Move.from_uci(uci_move)
-            if move in self.board.legal_moves:
-                self.board.push(move)
-                self.is_my_turn = True
-                self.status_lbl.value = "TOCCA A TE!"
-                self.update_pieces()
+            # Qui ci fidiamo del server (che ha già validato)
+            self.board.push(move)
+            self.is_my_turn = True
+            self.status_lbl.value = "TOCCA A TE!"
+            self.update_pieces()
         except:
-            print("Errore mossa avversario")
+            pass # Mossa strana ricevuta
 
 def main(page: ft.Page):
     ChessClient(page)
