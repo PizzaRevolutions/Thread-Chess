@@ -1,129 +1,140 @@
 import socket
 import threading
 import flet as ft
-import chess # Ora il server usa la libreria scacchi!
+import chess 
 
-HOST = "localhost"
-PORT = 5000
-clients = []
-# Struttura sessioni: [ (sock1, nick1), (sock2, nick2), chess.Board() ]
-sessioni = [] 
+# Costanti di rete
+INDIRIZZO_SERVER = "localhost"
+PORTA_SERVER = 5000
 
-def gestisciClient(client_socket, indirizzo, page):
+# Liste globali per la gestione
+client_connessi = []
+# Struttura sessioni_gioco: [ (socket_g1, nick_g1), (socket_g2, nick_g2), scacchiera_oggetto ]
+sessioni_gioco = [] 
+
+def gestisci_client(socket_client, indirizzo_ip, pagina):
     nickname = "Sconosciuto"
     try:
         # 1. Ricezione Nickname
-        nickname = client_socket.recv(1024).decode('utf-8').strip()
-        print(f"[CONNESSO] {nickname} da {indirizzo}")
+        nickname = socket_client.recv(1024).decode('utf-8').strip()
+        print(f"[CONNESSO] {nickname} da {indirizzo_ip}")
         
-        clients.append((client_socket, nickname))
-        page.add(ft.Text(f"{nickname} connesso. In attesa..."))
-        page.update()
+        client_connessi.append((socket_client, nickname))
+        pagina.add(ft.Text(f"{nickname} connesso. In attesa..."))
+        pagina.update()
 
-        # 2. Matchmaking
+        # 2. Matchmaking (Creazione della partita)
         sessione_corrente = None
-        player_index = -1 # 0 = Bianco, 1 = Nero
+        indice_giocatore = -1 # 0 = Bianco, 1 = Nero
 
-        for s in sessioni:
-            if len(s) < 2: # Se c'è spazio (c'è solo 1 giocatore e manca la board)
-                s.insert(1, (client_socket, nickname)) # Aggiungo come secondo giocatore
-                sessione_corrente = s
-                player_index = 1 # Sono il Nero
+        for sessione in sessioni_gioco:
+            # Se la sessione ha meno di 2 elementi, significa che c'è un solo giocatore e manca la scacchiera
+            if len(sessione) < 2: 
+                sessione.insert(1, (socket_client, nickname)) # Mi aggiungo come secondo giocatore
+                sessione_corrente = sessione
+                indice_giocatore = 1 # Sono il Nero
                 
                 # Ora siamo in 2: Creiamo la Scacchiera e Iniziamo!
-                board = chess.Board()
-                s.append(board) # La scacchiera è l'elemento indice 2
+                scacchiera = chess.Board()
+                sessione.append(scacchiera) # La scacchiera diventa l'elemento indice 2
                 
-                p1_sock = s[0][0]
-                p2_sock = s[1][0]
+                socket_g1 = sessione[0][0]
+                socket_g2 = sessione[1][0]
+                nick_g1 = sessione[0][1]
+                nick_g2 = sessione[1][1]
                 
-                print(f"START: {s[0][1]} vs {s[1][1]}")
-                page.add(ft.Text(f"PARTITA: {s[0][1]} (W) vs {s[1][1]} (B)"))
-                page.update()
+                print(f"START: {nick_g1} vs {nick_g2}")
+                pagina.add(ft.Text(f"PARTITA: {nick_g1} (Bianco) vs {nick_g2} (Nero)"))
+                pagina.update()
 
-                p1_sock.send("START|WHITE".encode())
-                p2_sock.send("START|BLACK".encode())
+                # Invio segnale di start e assegnazione colori
+                socket_g1.send("START|WHITE".encode())
+                socket_g2.send("START|BLACK".encode())
                 break
         
         if not sessione_corrente:
-            # Creo nuova sessione con me come primo giocatore
-            nuova_s = [(client_socket, nickname)] 
-            sessioni.append(nuova_s)
-            sessione_corrente = nuova_s
-            player_index = 0 # Sono il Bianco
+            # Se non ho trovato partite aperte, creo una nuova sessione con me come primo giocatore
+            nuova_sessione = [(socket_client, nickname)] 
+            sessioni_gioco.append(nuova_sessione)
+            sessione_corrente = nuova_sessione
+            indice_giocatore = 0 # Sono il Bianco
 
-        # 3. Loop di Gioco (Server Authoritative)
+        # 3. Ciclo di Gioco (Logica Autorevole del Server)
         while True:
-            msg = client_socket.recv(1024).decode()
-            if not msg: break
+            messaggio = socket_client.recv(1024).decode()
+            if not messaggio: break
             
-            # Controllo se la partita è iniziata (ci sono 2 player e la board)
+            # Controllo se la partita è effettivamente iniziata (ci sono 2 player e la scacchiera)
             if len(sessione_corrente) < 3:
                 continue
 
-            board = sessione_corrente[2] # Recupero l'oggetto chess.Board
+            scacchiera = sessione_corrente[2] # Recupero l'oggetto chess.Board
             
             # CONTROLLO 1: È il turno di questo socket?
-            # board.turn è True per White, False per Black
-            # player_index è 0 per White, 1 per Black
-            # Quindi: se (board.turn == True e player_index == 0) -> OK
-            is_white_turn = board.turn
-            am_i_white = (player_index == 0)
+            # scacchiera.turn è True per il Bianco, False per il Nero
+            # indice_giocatore è 0 per il Bianco, 1 per il Nero
+            e_turno_bianco = scacchiera.turn
+            sono_il_bianco = (indice_giocatore == 0)
             
-            if is_white_turn != am_i_white:
+            if e_turno_bianco != sono_il_bianco:
                 print(f"Mossa rifiutata: non è il turno di {nickname}")
-                client_socket.send("ERROR|Non è il tuo turno".encode())
+                socket_client.send("ERROR|Non è il tuo turno".encode())
                 continue
 
-            # CONTROLLO 2: La mossa è valida?
+            # CONTROLLO 2: La mossa è valida secondo le regole degli scacchi?
             try:
-                move = chess.Move.from_uci(msg)
-                if move in board.legal_moves:
-                    # VALIDAZIONE OK: Eseguiamo la mossa sul Server
-                    board.push(move)
-                    print(f"Mossa valida {msg} da {nickname}. Inoltro...")
+                mossa = chess.Move.from_uci(messaggio)
+                if mossa in scacchiera.legal_moves:
+                    # VALIDAZIONE OK: Eseguiamo la mossa sulla scacchiera del Server
+                    scacchiera.push(mossa)
+                    print(f"Mossa valida {messaggio} da {nickname}. Inoltro...")
                     
                     # Inoltra la mossa all'AVVERSARIO
-                    opponent_idx = 1 if player_index == 0 else 0
-                    opponent_sock = sessione_corrente[opponent_idx][0]
-                    opponent_sock.send(msg.encode())
+                    indice_avversario = 1 if indice_giocatore == 0 else 0
+                    socket_avversario = sessione_corrente[indice_avversario][0]
+                    socket_avversario.send(messaggio.encode())
                     
-                    # Controlla fine partita
-                    if board.is_game_over():
-                        res = board.result()
-                        page.add(ft.Text(f"Partita finita: {res}"))
-                        page.update()
+                    # Controlla fine partita (Scacco matto, stallo, ecc.)
+                    if scacchiera.is_game_over():
+                        risultato = scacchiera.result()
+                        pagina.add(ft.Text(f"Partita finita: {risultato}"))
+                        pagina.update()
                 else:
-                    print(f"Mossa illegale tentata da {nickname}: {msg}")
-                    client_socket.send("ERROR|Mossa illegale".encode())
+                    print(f"Mossa illegale tentata da {nickname}: {messaggio}")
+                    socket_client.send("ERROR|Mossa illegale".encode())
             except ValueError:
-                pass
+                pass # Formato mossa non valido
 
-    except Exception as e:
-        print(f"Errore {nickname}: {e}")
+    except Exception as errore:
+        print(f"Errore {nickname}: {errore}")
     finally:
-        # Pulizia sessione (semplificata)
-        if (client_socket, nickname) in clients:
-            clients.remove((client_socket, nickname))
-        # Rimuovi l'intera sessione se qualcuno si disconnette
-        if sessione_corrente and sessione_corrente in sessioni:
-            sessioni.remove(sessione_corrente)
-            page.add(ft.Text(f"Sessione chiusa per disconnessione di {nickname}"))
-            page.update()
-        client_socket.close()
+        # Pulizia sessione in caso di disconnessione
+        if (socket_client, nickname) in client_connessi:
+            client_connessi.remove((socket_client, nickname))
+        
+        # Rimuovi l'intera sessione se uno dei due si disconnette
+        if sessione_corrente and sessione_corrente in sessioni_gioco:
+            sessioni_gioco.remove(sessione_corrente)
+            pagina.add(ft.Text(f"Sessione chiusa per disconnessione di {nickname}"))
+            pagina.update()
+        
+        socket_client.close()
 
-def avvia_server(page):
-    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    server.bind((HOST, PORT))
-    server.listen()
-    page.add(ft.Text(f"SERVER AUTOREVOLE AVVIATO SU {HOST}:{PORT}"))
-    page.update()
+def avvia_server(pagina):
+    socket_server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    socket_server.bind((INDIRIZZO_SERVER, PORTA_SERVER))
+    socket_server.listen()
+    
+    pagina.add(ft.Text(f"SERVER AUTOREVOLE AVVIATO SU {INDIRIZZO_SERVER}:{PORTA_SERVER}"))
+    pagina.update()
+    
     while True:
-        client, addr = server.accept()
-        threading.Thread(target=gestisciClient, args=(client, addr, page), daemon=True).start()
+        client, indirizzo = socket_server.accept()
+        threading.Thread(target=gestisci_client, args=(client, indirizzo, pagina), daemon=True).start()
 
-def main(page: ft.Page):
-    page.title = "Server Scacchi (Authoritative)"
-    threading.Thread(target=avvia_server, args=(page,), daemon=True).start()
+def principale(pagina: ft.Page):
+    pagina.title = "Server Scacchi (Autorevole)"
+    # Avvia il server in un thread separato per non bloccare la GUI di Flet
+    threading.Thread(target=avvia_server, args=(pagina,), daemon=True).start()
 
 ft.app(target=main)
