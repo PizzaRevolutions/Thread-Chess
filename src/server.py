@@ -76,6 +76,30 @@ def gestisci_client(socket_client, indirizzo_ip, pagina):
             e_turno_bianco = scacchiera.turn
             sono_il_bianco = (indice_giocatore == 0)
             
+            # Gestione richiesta mosse valide
+            if messaggio.startswith("MOVES|"):
+                if e_turno_bianco != sono_il_bianco:
+                    socket_client.send("MOVES|".encode())  # Nessuna mossa valida se non è il tuo turno
+                    continue
+                
+                try:
+                    casella_richiesta = messaggio.split("|")[1]
+                    square = chess.parse_square(casella_richiesta)
+                    pezzo = scacchiera.piece_at(square)
+                    
+                    # Verifica che ci sia un pezzo e che sia del colore del giocatore
+                    if pezzo and pezzo.color == (chess.WHITE if sono_il_bianco else chess.BLACK):
+                        # Trova tutte le mosse legali da questa casella
+                        mosse_valide = [m for m in scacchiera.legal_moves if m.from_square == square]
+                        caselle_valide = [chess.square_name(m.to_square) for m in mosse_valide]
+                        risposta = f"MOVES|{','.join(caselle_valide)}"
+                        socket_client.send(risposta.encode())
+                    else:
+                        socket_client.send("MOVES|".encode())  # Nessuna mossa valida
+                except:
+                    socket_client.send("MOVES|".encode())  # Errore nel parsing
+                continue
+            
             if e_turno_bianco != sono_il_bianco:
                 print(f"Mossa rifiutata: non è il turno di {nickname}")
                 socket_client.send("ERROR|Non è il tuo turno".encode())
@@ -132,7 +156,7 @@ def avvia_server(pagina):
         client, indirizzo = socket_server.accept()
         threading.Thread(target=gestisci_client, args=(client, indirizzo, pagina), daemon=True).start()
 
-def principale(pagina: ft.Page):
+def main(pagina: ft.Page):
     pagina.title = "Server Scacchi (Autorevole)"
     # Avvia il server in un thread separato per non bloccare la GUI di Flet
     threading.Thread(target=avvia_server, args=(pagina,), daemon=True).start()

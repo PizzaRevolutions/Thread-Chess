@@ -17,135 +17,232 @@ class ClientScacchi:
         
         self.socket_client = None
         self.scacchiera = chess.Board()
-        self.mio_colore = None 
-        self.mio_turno = False
-        self.caselle_grafiche = {} # Dizionario per mappare le caselle UI
+        self.mioColore = None 
+        self.mioTurno = False
+        self.caselleGrafica = {} # Dizionario per mappare le caselle UI
+        self.casellaSelezionata = None # Casella del pezzo selezionato
+        self.mosseValideEvidenziate = [] # Lista delle caselle con mosse valide evidenziate
 
         # UI Login
-        self.campo_nickname = ft.TextField(label="Nickname", width=200, text_align=ft.TextAlign.CENTER)
-        self.etichetta_stato = ft.Text("", size=20, weight="bold")
+        self.campoNickname = ft.TextField(label="Nickname", width=200, text_align=ft.TextAlign.CENTER)
+        self.etichettaStatoAttuale = ft.Text("", size=20, weight="bold")
         
-        self.mostra_schermata_login()
+        self.schermataLogin()
 
-    def mostra_schermata_login(self):
+    def schermataLogin(self):
         self.pagina.clean()
         self.pagina.add(
             ft.Column([
                 ft.Text("Scacchi Online", size=40, weight="bold"),
-                self.campo_nickname,
+                self.campoNickname,
                 ft.ElevatedButton("Entra in Coda", on_click=self.connetti_al_server)
             ], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER)
         )
 
     def mostra_schermata_attesa(self):
         self.pagina.clean()
-        self.pagina.add(ft.Column([ft.ProgressRing(), ft.Text("In attesa dell'avversario...", size=20)], alignment=ft.MainAxisAlignment.CENTER))
+        self.pagina.add(ft.Column([ft.ProgressRing(), ft.Text("In attesa dell'avversario...", size=20)],alignment=ft.MainAxisAlignment.CENTER))
         self.pagina.update()
 
     def connetti_al_server(self, evento):
-        if not self.campo_nickname.value: return
+        if not self.campoNickname.value: return
         
         self.socket_client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.socket_client.connect((INDIRIZZO_SERVER, PORTA_SERVER))
-        self.socket_client.send(self.campo_nickname.value.encode())
+        self.socket_client.send(self.campoNickname.value.encode())
         
         self.mostra_schermata_attesa()
         # Avvia il thread per ascoltare il server
-        threading.Thread(target=self.ciclo_ricezione_dati, daemon=True).start()
+        threading.Thread(target=self.cicloRicezione, daemon=True).start()
 
-    def ciclo_ricezione_dati(self):
+    def cicloRicezione(self):
         while True:
             try:
-                dati_ricevuti = self.socket_client.recv(1024).decode()
-                if not dati_ricevuti: break
-                
-                if dati_ricevuti.startswith("START|"):
-                    colore_assegnato = dati_ricevuti.split("|")[1]
-                    self.mio_colore = chess.WHITE if colore_assegnato == "WHITE" else chess.BLACK
-                    self.mio_turno = (self.mio_colore == chess.WHITE)
-                    self.inizializza_scacchiera_grafica()
-                
-                elif dati_ricevuti.startswith("ERROR|"):
-                    messaggio_errore = dati_ricevuti.split("|")[1]
-                    print(f"ERRORE DAL SERVER: {messaggio_errore}")
-                    
+                datoRicevuto = self.socket_client.recv(1024).decode()
+                if not datoRicevuto: 
+                    break
+
+                if datoRicevuto.startswith("START|"):
+                    coloreAssegnato = datoRicevuto.split("|")[1]
+                    self.mioColore = chess.WHITE if coloreAssegnato == "WHITE" else chess.BLACK
+                    self.mioTurno = (self.mioColore == chess.WHITE)
+                    self.schermataScacchiera()
+                elif datoRicevuto.startswith("ERROR|"):
+                    messaggioErrore = datoRicevuto.split("|")[1]
+                    print(f"ERRORE DAL SERVER: {messaggioErrore}")
+                elif datoRicevuto.startswith("MOVES|"):
+                    # Formato: MOVES|e4,e5,e6 (lista di caselle separate da virgola)
+                    caselle_valide = datoRicevuto.split("|")[1].split(",") if len(datoRicevuto.split("|")) > 1 and datoRicevuto.split("|")[1] else []
+                    self.mosseValideEvidenziate = caselle_valide
+                    self.aggiornaPezzi()
                 else:
-                    self.gestisci_mossa_avversario(dati_ricevuti)
+                    self.mossaAvversario(datoRicevuto)
                     
             except Exception as errore:
                 print(f"Disconnesso: {errore}")
                 break
 
-    def inizializza_scacchiera_grafica(self):
+    def schermataScacchiera(self):
         self.pagina.clean()
-        immagine_scacchiera = ft.Image(src="board.png", width=400, height=400, fit=ft.ImageFit.FILL)
-        colonna_griglia = ft.Column(spacing=0, width=400, height=400)
+        immagineScacchiera = ft.Image(src="board.png", width=400, height=400, fit=ft.ImageFit.FILL)
+        colonnaGriglia = ft.Column(spacing=0, width=400, height=400)
         
         # Orientamento scacchiera (Se sono bianco vedo 1 in basso, se nero vedo 8 in basso)
-        righe = range(7, -1, -1) if self.mio_colore == chess.WHITE else range(8)
-        colonne = range(8) if self.mio_colore == chess.WHITE else range(7, -1, -1)
+        righe = range(7, -1, -1) if self.mioColore == chess.WHITE else range(8)
+        colonne = range(8) if self.mioColore == chess.WHITE else range(7, -1, -1)
 
         for riga_idx in righe:
-            riga_componenti = []
+            rigaComponenti = []
             for colonna_idx in colonne:
                 # Calcola il nome della casella (es. "e4")
-                nome_casella = chess.square_name(chess.square(colonna_idx, riga_idx))
+                nomeCasella = chess.square_name(chess.square(colonna_idx, riga_idx))
                 
                 contenitore = ft.Container(width=50, height=50, alignment=ft.alignment.center)
                 
-                # Zona di rilascio per il Drag & Drop
-                bersaglio = ft.DragTarget(
-                    group="scacchi", 
-                    content=contenitore, 
-                    on_accept=self.al_rilascio_pezzo, 
-                    data=nome_casella
+                # Zona di rilascio per il Drag & Drop e click
+                bersaglio = ft.GestureDetector(
+                    content=ft.DragTarget(
+                        group="scacchi", 
+                        content=contenitore, 
+                        on_accept=self.rilascioPezzo, 
+                        data=nomeCasella
+                    ),
+                    on_tap=lambda e, casella=nomeCasella: self.clickSuCasella(e, casella)
                 )
                 
-                self.caselle_grafiche[nome_casella] = contenitore
-                riga_componenti.append(bersaglio)
+                self.caselleGrafica[nomeCasella] = contenitore
+                rigaComponenti.append(bersaglio)
             
-            colonna_griglia.controls.append(ft.Row(controls=riga_componenti, spacing=0))
+            colonnaGriglia.controls.append(ft.Row(controls=rigaComponenti, spacing=0))
 
-        self.etichetta_stato.value = "Tocca a te!" if self.mio_turno else "Attendi avversario..."
+        self.etichettaStatoAttuale.value = "Tocca a te!" if self.mioTurno else "Attendi avversario..."
         
         self.pagina.add(
-            self.etichetta_stato,
+            self.etichettaStatoAttuale,
             ft.Container(
-                ft.Stack([immagine_scacchiera, colonna_griglia], width=400, height=400), 
+                ft.Stack([immagineScacchiera, colonnaGriglia], width=400, height=400), 
                 border=ft.border.all(2, "white")
             ),
-            ft.Text(f"Tu sei: {'BIANCO' if self.mio_colore == chess.WHITE else 'NERO'}")
+            ft.Text(f"Tu sei: {'BIANCO' if self.mioColore == chess.WHITE else 'NERO'}")
         )
-        self.aggiorna_pezzi()
+        self.aggiornaPezzi()
         self.pagina.update()
 
-    def aggiorna_pezzi(self):
-        mappa_pezzi = self.scacchiera.piece_map()
+    def aggiornaPezzi(self):
+        mappaPezzi = self.scacchiera.piece_map()
         
-        for nome_casella, contenitore in self.caselle_grafiche.items():
-            pezzo = mappa_pezzi.get(chess.parse_square(nome_casella))
+        for nomeCasella, contenitore in self.caselleGrafica.items():
+            pezzo = mappaPezzi.get(chess.parse_square(nomeCasella))
+            
+            # Determina il colore di sfondo della casella
+            bgcolor = None
+            border = None
+            
+            # Evidenzia la casella selezionata
+            if nomeCasella == self.casellaSelezionata:
+                bgcolor = "#4CAF50"  # Verde per la casella selezionata
+                border = ft.border.all(3, "#2E7D32")
+            # Evidenzia le caselle con mosse valide
+            elif nomeCasella in self.mosseValideEvidenziate:
+                bgcolor = "#81C784"  # Verde chiaro per mosse valide
+                border = ft.border.all(2, "#66BB6A")
+            
+            # Aggiorna lo sfondo del contenitore
+            contenitore.bgcolor = bgcolor
+            contenitore.border = border
+            
             contenitore.content = None
             
             if pezzo:
                 # Esempio nome file: wP.png (White Pawn) o bK.png (Black King)
-                nome_file_img = f"{'w' if pezzo.color else 'b'}{pezzo.symbol().upper()}.png"
-                immagine = ft.Image(src=nome_file_img, width=40, height=40)
+                nomeImgPezzo = f"{'w' if pezzo.color else 'b'}{pezzo.symbol().upper()}.png"
+                immaginePezzo = ft.Image(src=nomeImgPezzo, width=40, height=40)
                 
                 # Rendi il pezzo trascinabile solo se è del mio colore
-                if pezzo.color == self.mio_colore:
-                    contenitore.content = ft.Draggable(
+                if pezzo.color == self.mioColore:
+                    immaginePezzoDrag = ft.Image(src=nomeImgPezzo, width=60, height=60)
+                    # Aggiungi GestureDetector per gestire il click
+                    draggable = ft.Draggable(
                         group="scacchi", 
-                        content=immagine, 
-                        content_when_dragging=ft.Container(content=immagine, opacity=0.5), 
-                        data=nome_casella
+                        content=immaginePezzo, 
+                        content_when_dragging=ft.Container(content=immaginePezzoDrag, opacity=0.5), 
+                        data=nomeCasella
+                    )
+                    contenitore.content = ft.GestureDetector(
+                        content=draggable,
+                        on_tap=lambda e, casella=nomeCasella: self.clickSuPezzo(e, casella)
                     )
                 else:
-                    contenitore.content = immagine
+                    contenitore.content = immaginePezzo
+            else:
+                # Se non c'è pezzo, mantieni l'evidenziazione se necessario
+                if nomeCasella not in self.mosseValideEvidenziate and nomeCasella != self.casellaSelezionata:
+                    contenitore.bgcolor = None
+                    contenitore.border = None
+                # Altrimenti l'evidenziazione è già stata impostata sopra
         self.pagina.update()
 
-    def al_rilascio_pezzo(self, evento: ft.DragTargetEvent):
+    def richiediMosseValide(self, casella):
+        """Richiede al server le mosse valide per una casella"""
+        if self.socket_client and self.mioTurno:
+            self.socket_client.send(f"MOVES|{casella}".encode())
+    
+    def clickSuPezzo(self, evento, nomeCasella):
+        """Gestisce il click su un pezzo per selezionarlo"""
+        if not self.mioTurno:
+            return
+        
+        # Se clicco sullo stesso pezzo, deseleziona
+        if self.casellaSelezionata == nomeCasella:
+            self.casellaSelezionata = None
+            self.mosseValideEvidenziate = []
+            self.aggiornaPezzi()
+            return
+        
+        # Verifica che ci sia un pezzo del mio colore su questa casella
+        pezzo = self.scacchiera.piece_at(chess.parse_square(nomeCasella))
+        if pezzo and pezzo.color == self.mioColore:
+            self.casellaSelezionata = nomeCasella
+            self.richiediMosseValide(nomeCasella)
+    
+    def clickSuCasella(self, evento, nomeCasella):
+        """Gestisce il click su una casella per muovere il pezzo selezionato"""
+        if not self.mioTurno:
+            return
+        
+        # Se ho un pezzo selezionato e clicco su una casella valida, muovo
+        if self.casellaSelezionata and nomeCasella in self.mosseValideEvidenziate:
+            casella_partenza = self.casellaSelezionata
+            casella_arrivo = nomeCasella
+            
+            mossa = None
+            try:
+                mossa = self.scacchiera.find_move(chess.parse_square(casella_partenza), chess.parse_square(casella_arrivo))
+            except:
+                try:
+                    mossa = chess.Move.from_uci(f"{casella_partenza}{casella_arrivo}q")
+                except:
+                    mossa = None
+            
+            if mossa and mossa in self.scacchiera.legal_moves:
+                self.scacchiera.push(mossa)
+                self.casellaSelezionata = None
+                self.mosseValideEvidenziate = []
+                self.aggiornaPezzi()
+                self.mioTurno = False
+                self.etichettaStatoAttuale.value = "Turno avversario..."
+                self.pagina.update()
+                
+                self.socket_client.send(mossa.uci().encode())
+        # Se clicco su un altro pezzo del mio colore, lo seleziono
+        elif nomeCasella in self.caselleGrafica:
+            pezzo = self.scacchiera.piece_at(chess.parse_square(nomeCasella))
+            if pezzo and pezzo.color == self.mioColore:
+                self.clickSuPezzo(None, nomeCasella)
+    
+    def rilascioPezzo(self, evento: ft.DragTargetEvent):
         # 1. Controllo preliminare Client: è il mio turno?
-        if not self.mio_turno: return
+        if not self.mioTurno: return
         
         casella_partenza = self.pagina.get_control(evento.src_id).data
         casella_arrivo = evento.control.data
@@ -165,28 +262,32 @@ class ClientScacchi:
         if mossa and mossa in self.scacchiera.legal_moves:
             # Eseguiamo localmente "con fiducia" (Optimistic UI update)
             self.scacchiera.push(mossa)
-            self.aggiorna_pezzi()
-            self.mio_turno = False
-            self.etichetta_stato.value = "Turno avversario..."
+            self.casellaSelezionata = None
+            self.mosseValideEvidenziate = []
+            self.aggiornaPezzi()
+            self.mioTurno = False
+            self.etichettaStatoAttuale.value = "Turno avversario..."
             self.pagina.update()
             
             # INVIO AL SERVER
             self.socket_client.send(mossa.uci().encode())
         else:
-            self.aggiorna_pezzi() # Reset visuale in caso di mossa invalida (il pezzo torna indietro)
+            self.aggiornaPezzi() # Reset visuale in caso di mossa invalida (il pezzo torna indietro)
 
-    def gestisci_mossa_avversario(self, mossa_uci):
+    def mossaAvversario(self, mossa_uci):
         try:
             mossa = chess.Move.from_uci(mossa_uci)
             # Qui ci fidiamo del server (che ha già validato la mossa)
             self.scacchiera.push(mossa)
-            self.mio_turno = True
-            self.etichetta_stato.value = "TOCCA A TE!"
-            self.aggiorna_pezzi()
+            self.casellaSelezionata = None
+            self.mosseValideEvidenziate = []
+            self.mioTurno = True
+            self.etichettaStatoAttuale.value = "TOCCA A TE!"
+            self.aggiornaPezzi()
         except:
             pass # Ignora errori di parsing se arrivano dati sporchi
 
-def principale(pagina: ft.Page):
+def main(pagina: ft.Page):
     ClientScacchi(pagina)
 
 ft.app(target=main, assets_dir="assets")
