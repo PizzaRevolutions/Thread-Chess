@@ -22,6 +22,11 @@ class ClientScacchi:
         self.caselleGrafica = {} # Dizionario per mappare le caselle UI
         self.casellaSelezionata = None # Casella del pezzo selezionato
         self.mosseValideEvidenziate = [] # Lista delle caselle con mosse valide evidenziate
+        self.durataTimer = 600
+        self.tempo_bianco = self.durataTimer
+        self.tempo_nero = self.durataTimer
+        self.testoTempoBianco = None
+        self.testoTempoNero = None
 
         # UI Login
         self.campoNickname = ft.TextField(label="Nickname", width=200, text_align=ft.TextAlign.CENTER)
@@ -75,6 +80,23 @@ class ClientScacchi:
                     caselle_valide = datoRicevuto.split("|")[1].split(",") if len(datoRicevuto.split("|")) > 1 and datoRicevuto.split("|")[1] else []
                     self.mosseValideEvidenziate = caselle_valide
                     self.aggiornaPezzi()
+                elif datoRicevuto.startswith("TIME|"):
+                    parti = datoRicevuto.split("|")
+                    if len(parti) >= 3:
+                        try:
+                            tempo_bianco = int(float(parti[1]))
+                            tempo_nero = int(float(parti[2]))
+                            self.aggiorna_timer_ui(tempo_bianco, tempo_nero)
+                        except ValueError:
+                            pass
+                elif datoRicevuto.startswith("TIMEOUT|"):
+                    parti = datoRicevuto.split("|")
+                    if len(parti) >= 2:
+                        colore_scaduto = parti[1]
+                        messaggio = "Tempo scaduto per il Bianco" if colore_scaduto == "WHITE" else "Tempo scaduto per il Nero"
+                        self.etichettaStatoAttuale.value = messaggio
+                        self.mioTurno = False
+                        self.pagina.update()
                 else:
                     self.mossaAvversario(datoRicevuto)
                     
@@ -84,6 +106,8 @@ class ClientScacchi:
 
     def schermataScacchiera(self):
         self.pagina.clean()
+        self.tempo_bianco = self.durataTimer
+        self.tempo_nero = self.durataTimer
         immagineScacchiera = ft.Image(src="board.png", width=400, height=400, fit=ft.ImageFit.FILL)
         colonnaGriglia = ft.Column(spacing=0, width=400, height=400)
         
@@ -116,15 +140,26 @@ class ClientScacchi:
             colonnaGriglia.controls.append(ft.Row(controls=rigaComponenti, spacing=0))
 
         self.etichettaStatoAttuale.value = "Tocca a te!" if self.mioTurno else "Attendi avversario..."
+        self.testoTempoBianco = ft.Text("", size=18, weight="bold", color="white")
+        self.testoTempoNero = ft.Text("", size=18, weight="bold", color="white")
         
         self.pagina.add(
             self.etichettaStatoAttuale,
+            ft.Row(
+                [
+                    self.testoTempoBianco,
+                    self.testoTempoNero
+                ],
+                alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                width=400
+            ),
             ft.Container(
                 ft.Stack([immagineScacchiera, colonnaGriglia], width=400, height=400), 
                 border=ft.border.all(2, "white")
             ),
             ft.Text(f"Tu sei: {'BIANCO' if self.mioColore == chess.WHITE else 'NERO'}")
         )
+        self.aggiorna_timer_ui(self.tempo_bianco, self.tempo_nero)
         self.aggiornaPezzi()
         self.pagina.update()
 
@@ -181,6 +216,22 @@ class ClientScacchi:
                     contenitore.border = None
                 # Altrimenti l'evidenziazione è già stata impostata sopra
         self.pagina.update()
+
+    def formatta_tempo(self, secondi):
+        secondi = max(0, int(secondi))
+        minuti = secondi // 60
+        residuo = secondi % 60
+        return f"{minuti:02d}:{residuo:02d}"
+
+    def aggiorna_timer_ui(self, tempo_bianco, tempo_nero):
+        self.tempo_bianco = tempo_bianco
+        self.tempo_nero = tempo_nero
+        if self.testoTempoBianco:
+            self.testoTempoBianco.value = f"Tempo Bianco: {self.formatta_tempo(tempo_bianco)}"
+        if self.testoTempoNero:
+            self.testoTempoNero.value = f"Tempo Nero: {self.formatta_tempo(tempo_nero)}"
+        if self.testoTempoBianco or self.testoTempoNero:
+            self.pagina.update()
 
     def richiediMosseValide(self, casella):
         """Richiede al server le mosse valide per una casella"""

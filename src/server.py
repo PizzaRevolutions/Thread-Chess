@@ -1,11 +1,13 @@
 import socket
 import threading
+import time
 import flet as ft
 import chess 
 
 # Costanti di rete
 INDIRIZZO_SERVER = "localhost"
 PORTA_SERVER = 5000
+DURATA_TIMER = 600  # secondi (10 minuti)
 
 # Liste globali per la gestione
 client_connessi = []
@@ -37,6 +39,12 @@ def gestisci_client(socket_client, indirizzo_ip, pagina):
                 # Ora siamo in 2: Creiamo la Scacchiera e Iniziamo!
                 scacchiera = chess.Board()
                 sessione.append(scacchiera) # La scacchiera diventa l'elemento indice 2
+                timer_info = {
+                    "white_time": DURATA_TIMER,
+                    "black_time": DURATA_TIMER,
+                    "ultimo_tick": time.time()
+                }
+                sessione.append(timer_info)  # Timer info diventa elemento indice 3
                 
                 socket_g1 = sessione[0][0]
                 socket_g2 = sessione[1][0]
@@ -50,6 +58,10 @@ def gestisci_client(socket_client, indirizzo_ip, pagina):
                 # Invio segnale di start e assegnazione colori
                 socket_g1.send("START|WHITE".encode())
                 socket_g2.send("START|BLACK".encode())
+                invia_tempo_ai_giocatori(sessione)
+                threading.Thread(
+                    target=loop_timer_sessione, args=(sessione, pagina), daemon=True
+                ).start()
                 break
         
         if not sessione_corrente:
@@ -69,6 +81,13 @@ def gestisci_client(socket_client, indirizzo_ip, pagina):
                 continue
 
             scacchiera = sessione_corrente[2] # Recupero l'oggetto chess.Board
+            timer_info_presente = len(sessione_corrente) >= 4
+            
+            if timer_info_presente:
+                colore_scaduto = aggiorna_timer(sessione_corrente)
+                if colore_scaduto:
+                    gestisci_timeout(sessione_corrente, colore_scaduto, pagina)
+                    break
             
             # CONTROLLO 1: È il turno di questo socket?
             # scacchiera.turn è True per il Bianco, False per il Nero
@@ -123,6 +142,8 @@ def gestisci_client(socket_client, indirizzo_ip, pagina):
                         risultato = scacchiera.result()
                         pagina.add(ft.Text(f"Partita finita: {risultato}"))
                         pagina.update()
+                    if timer_info_presente:
+                        invia_tempo_ai_giocatori(sessione_corrente)
                 else:
                     print(f"Mossa illegale tentata da {nickname}: {messaggio}")
                     socket_client.send("ERROR|Mossa illegale".encode())
@@ -143,6 +164,68 @@ def gestisci_client(socket_client, indirizzo_ip, pagina):
             pagina.update()
         
         socket_client.close()
+
+def invia_tempo_ai_giocatori(sessione):
+    if len(sessione) < 4:
+        return
+    timer_info = sessione[3]
+    tempo_bianco = max(0, int(timer_info["white_time"]))
+    tempo_nero = max(0, int(timer_info["black_time"]))
+    messaggio = f"TIME|{tempo_bianco}|{tempo_nero}"
+    for giocatore in sessione[:2]:
+        try:
+            giocatore[0].send(messaggio.encode())
+        except:
+            pass
+
+def aggiorna_timer(sessione):
+    if len(sessione) < 4:
+        return None
+    timer_info = sessione[3]
+    scacchiera = sessione[2]
+    ora_attuale = time.time()
+    trascorso = ora_attuale - timer_info["ultimo_tick"]
+    if trascorso <= 0:
+        return None
+    timer_info["ultimo_tick"] = ora_attuale
+    chiave_colore = "white_time" if scacchiera.turn else "black_time"
+    timer_info[chiave_colore] -= trascorso
+    if timer_info[chiave_colore] <= 0:
+        timer_info[chiave_colore] = 0
+        return "WHITE" if chiave_colore == "white_time" else "BLACK"
+    return None
+
+def gestisci_timeout(sessione, colore_scaduto, pagina):
+    messaggio_timeout = f"TIMEOUT|{colore_scaduto}"
+    descrizione = "Bianco" if colore_scaduto == "WHITE" else "Nero"
+    pagina.add(ft.Text(f"Tempo scaduto per {descrizione}"))
+    pagina.update()
+    for giocatore in sessione[:2]:
+        try:
+            giocatore[0].send(messaggio_timeout.encode())
+        except:
+            pass
+    if sessione in sessioni_gioco:
+        sessioni_gioco.remove(sessione)
+    for giocatore in sessione[:2]:
+        try:
+            giocatore[0].close()
+        except:
+            pass
+
+def loop_timer_sessione(sessione, pagina):
+    while True:
+        if sessione not in sessioni_gioco:
+            break
+        if len(sessione) < 4:
+            time.sleep(0.5)
+            continue
+        colore_scaduto = aggiorna_timer(sessione)
+        invia_tempo_ai_giocatori(sessione)
+        if colore_scaduto:
+            gestisci_timeout(sessione, colore_scaduto, pagina)
+            break
+        time.sleep(1)
 
 def avvia_server(pagina):
     socket_server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
