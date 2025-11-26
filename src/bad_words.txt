@@ -1,0 +1,21 @@
+# Elenco di parole vietate (una per riga, in minuscolo).
+# Puoi aggiungere/modificare liberamente questo file senza toccare il codice.
+
+cazzo
+merda
+stronzo
+stronza
+vaffanculo
+troia
+troio
+puttana
+puttaniere
+bastardo
+bastarda
+culo
+culone
+imbecille
+idiota
+deficiente
+figa
+puttanaio

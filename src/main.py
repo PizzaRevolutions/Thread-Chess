@@ -2,6 +2,7 @@ import flet as ft
 import socket
 import threading
 import chess
+import re
 
 # Costanti di connessione
 INDIRIZZO_SERVER = "localhost"
@@ -29,9 +30,17 @@ class ClientScacchi:
         self.testoTempoNero = None
         self.partitaTerminata = False
 
+        # Lista semplice di parole vietate (in minuscolo); personalizzabile
+        self.parole_vietate = [
+            "cazzo",
+            "merda",
+            "stronzo",
+            "vaffanculo",
+        ]
+
         # UI Login
         self.campoNickname = ft.TextField(label="Nickname", width=200, text_align=ft.TextAlign.CENTER)
-        self.etichettaStatoAttuale = ft.Text("", size=20, weight="bold")
+        self.etichettaStatoAttuale = ft.Text("", size=16, weight="bold", color="red")
         
         self.schermataLogin()
 
@@ -41,9 +50,44 @@ class ClientScacchi:
             ft.Column([
                 ft.Text("Scacchi Online", size=40, weight="bold"),
                 self.campoNickname,
-                ft.ElevatedButton("Entra in Coda", on_click=self.connetti_al_server)
+                self.etichettaStatoAttuale,
+                ft.ElevatedButton("Entra in Coda", on_click=self.connetti_al_server),
             ], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER)
         )
+
+    def nickname_valido(self, nickname: str) -> bool:
+        """Valida il nickname: non vuoto, non troppo lungo, senza parolacce o simboli strani."""
+        nickname = (nickname or "").strip()
+
+        if not nickname:
+            self.etichettaStatoAttuale.value = "Inserisci un nickname."
+            self.pagina.update()
+            return False
+
+        # Lunghezza massima
+        if len(nickname) > 16:
+            self.etichettaStatoAttuale.value = "Nickname troppo lungo (max 16 caratteri)."
+            self.pagina.update()
+            return False
+
+        # Solo lettere, numeri e underscore
+        if not re.fullmatch(r"[A-Za-z0-9_]+", nickname):
+            self.etichettaStatoAttuale.value = "Nickname: solo lettere, numeri e _ (niente simboli strani)."
+            self.pagina.update()
+            return False
+
+        # Controllo parolacce (match parziale, case-insensitive)
+        nick_lower = nickname.lower()
+        for parola in self.parole_vietate:
+            if parola in nick_lower:
+                self.etichettaStatoAttuale.value = "Nickname non consentito."
+                self.pagina.update()
+                return False
+
+        # Se tutto ok, pulisco eventuali messaggi di errore
+        self.etichettaStatoAttuale.value = ""
+        self.pagina.update()
+        return True
 
     def mostra_schermata_attesa(self):
         self.pagina.clean()
@@ -51,8 +95,13 @@ class ClientScacchi:
         self.pagina.update()
 
     def connetti_al_server(self, evento):
-        if not self.campoNickname.value: return
-        
+        nickname = self.campoNickname.value or ""
+        if not self.nickname_valido(nickname):
+            return
+
+        # Normalizzo il valore (ad es. senza spazi esterni)
+        self.campoNickname.value = nickname.strip()
+
         try:
             self.socket_client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.socket_client.connect((INDIRIZZO_SERVER, PORTA_SERVER))
@@ -130,8 +179,12 @@ class ClientScacchi:
                     self.mioTurno = (self.mioColore == chess.WHITE)
                     self.schermataScacchiera()
                 elif datoRicevuto.startswith("ERROR|"):
-                    messaggioErrore = datoRicevuto.split("|")[1]
+                    messaggioErrore = datoRicevuto.split("|", 1)[1] if "|" in datoRicevuto else "Errore dal server"
                     print(f"ERRORE DAL SERVER: {messaggioErrore}")
+                    # Torno alla schermata di login mostrando l'errore
+                    self.schermataLogin()
+                    self.etichettaStatoAttuale.value = messaggioErrore
+                    self.pagina.update()
                 elif datoRicevuto.startswith("MOVES|"):
                     # Formato: MOVES|e4,e5,e6 (lista di caselle separate da virgola)
                     caselle_valide = datoRicevuto.split("|")[1].split(",") if len(datoRicevuto.split("|")) > 1 and datoRicevuto.split("|")[1] else []

@@ -2,7 +2,10 @@ import socket
 import threading
 import time
 import flet as ft
-import chess 
+import chess
+import re
+import pathlib
+import functools
 
 # Costanti di rete
 INDIRIZZO_SERVER = "localhost"
@@ -20,6 +23,68 @@ client_connessi = []
 #   timer_info (dict) - opzionale finché non parte la partita
 # ]
 sessioni_gioco = [] 
+
+# Percorso del file con le parole vietate (stessa cartella di questo file)
+BAD_WORDS_FILE = pathlib.Path(__file__).with_name("bad_words.txt")
+
+
+@functools.lru_cache(maxsize=1)
+def carica_parole_vietate():
+    """
+    Legge il file bad_words.txt (una parola per riga, minuscolo).
+    Se il file non esiste o non è leggibile, ritorna una piccola lista di default.
+    """
+    try:
+        if BAD_WORDS_FILE.exists():
+            parole = []
+            with BAD_WORDS_FILE.open("r", encoding="utf-8") as f:
+                for riga in f:
+                    riga = riga.strip().lower()
+                    # Salta righe vuote o commenti
+                    if not riga or riga.startswith("#"):
+                        continue
+                    parole.append(riga)
+            if parole:
+                return parole
+    except Exception:
+        pass
+
+    # Fallback minimale se il file manca o è vuoto
+    return [
+        "cazzo",
+        "merda",
+        "stronzo",
+        "vaffanculo",
+    ]
+
+
+def nickname_valido(nickname: str) -> bool:
+    """
+    Valida il nickname lato server: lunghezza, caratteri e parolacce.
+    Deve essere coerente (o più restrittivo) rispetto al controllo lato client.
+    """
+    if not nickname:
+        return False
+
+    nickname = nickname.strip()
+
+    # Lunghezza massima
+    if len(nickname) > 16:
+        return False
+
+    # Solo lettere, numeri e underscore
+    if not re.fullmatch(r"[A-Za-z0-9_]+", nickname):
+        return False
+
+    # Lista di parole vietate caricata dal file (o fallback)
+    parole_vietate = carica_parole_vietate()
+
+    nick_lower = nickname.lower()
+    for parola in parole_vietate:
+        if parola in nick_lower:
+            return False
+
+    return True
 
 def notifica_fine_partita(sessione, risultato, pagina):
     """
@@ -86,6 +151,21 @@ def gestisci_client(socket_client, indirizzo_ip, pagina):
     try:
         # 1. Ricezione Nickname
         nickname = socket_client.recv(1024).decode('utf-8').strip()
+
+        # Validazione nickname lato server (sicurezza)
+        if not nickname_valido(nickname):
+            try:
+                socket_client.send("ERROR|Nickname non valido".encode())
+            except:
+                pass
+            try:
+                socket_client.close()
+            except:
+                pass
+            pagina.add(ft.Text(f"Connessione rifiutata da {indirizzo_ip}: nickname non valido ({nickname!r})"))
+            pagina.update()
+            return
+
         print(f"[CONNESSO] {nickname} da {indirizzo_ip}")
         
         client_connessi.append((socket_client, nickname))
