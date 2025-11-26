@@ -135,6 +135,23 @@ class ClientScacchi:
         durata = self.mappa_modalita_timer.get(valore, 600)
         self.durataTimer = durata
 
+    def nome_modalita_corrente(self) -> str:
+        """Restituisce una descrizione leggibile della modalità in base al timer selezionato."""
+        durata = self.durataTimer
+        if durata == 1200:
+            return "Classic (20 minuti)"
+        if durata == 600:
+            return "Rapid (10 minuti)"
+        if durata == 300:
+            return "Blitz (5 minuti)"
+        if durata == 180:
+            return "Blitz (3 minuti)"
+        if durata == 60:
+            return "Bullet (1 minuto)"
+        if durata == 0:
+            return "No time"
+        return f"Custom ({durata} s)"
+
     def mostra_schermata_attesa(self):
         self.pagina.clean()
         self.pagina.add(ft.Column([ft.ProgressRing(), ft.Text("In attesa dell'avversario...", size=20)],alignment=ft.MainAxisAlignment.CENTER))
@@ -465,8 +482,10 @@ class ClientScacchi:
                 border=ft.border.all(2, "white")
             )
         )
+        testo_colore = f"Tu sei: {'BIANCO' if self.mioColore == chess.WHITE else 'NERO'}"
+        testo_modalita = f"Modalità: {self.nome_modalita_corrente()}"
         controlli_principali.append(
-            ft.Text(f"Tu sei: {'BIANCO' if self.mioColore == chess.WHITE else 'NERO'}")
+            ft.Text(f"{testo_colore} | {testo_modalita}")
         )
 
         self.pagina.add(*controlli_principali)
