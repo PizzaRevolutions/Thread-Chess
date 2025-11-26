@@ -463,10 +463,10 @@ class ClientScacchi:
 
     def richiediMosseValide(self, casella):
         """Richiede al server le mosse valide per una casella"""
-        if self.socket_client and self.mioTurno:
+        if self.socket_client and self.mioTurno and not self.partitaTerminata:
             try:
                 self.socket_client.send(f"MOVES|{casella}".encode())
-            except (ConnectionResetError, OSError, BrokenPipeError) as e:
+            except (ConnectionResetError, OSError, BrokenPipeError, AttributeError) as e:
                 print(f"Errore invio richiesta mosse: {e}")
                 self.gestisci_disconnessione()
     
@@ -517,8 +517,11 @@ class ClientScacchi:
                 self.pagina.update()
                 
                 try:
-                    self.socket_client.send(mossa.uci().encode())
-                except (ConnectionResetError, OSError, BrokenPipeError) as e:
+                    # Può capitare che il socket sia stato chiuso tra la mossa locale
+                    # e l'invio, quindi verifichiamo prima che esista ancora.
+                    if self.socket_client and not self.partitaTerminata:
+                        self.socket_client.send(mossa.uci().encode())
+                except (ConnectionResetError, OSError, BrokenPipeError, AttributeError) as e:
                     print(f"Errore invio mossa: {e}")
                     self.gestisci_disconnessione()
         # Se clicco su un altro pezzo del mio colore, lo seleziono
@@ -558,8 +561,9 @@ class ClientScacchi:
             
             # INVIO AL SERVER
             try:
-                self.socket_client.send(mossa.uci().encode())
-            except (ConnectionResetError, OSError, BrokenPipeError) as e:
+                if self.socket_client and not self.partitaTerminata:
+                    self.socket_client.send(mossa.uci().encode())
+            except (ConnectionResetError, OSError, BrokenPipeError, AttributeError) as e:
                 print(f"Errore invio mossa: {e}")
                 self.gestisci_disconnessione()
         else:
