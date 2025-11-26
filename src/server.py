@@ -539,7 +539,6 @@ def gestisci_client(socket_client, indirizzo_ip, pagina):
             if sessione_corrente in sessioni_gioco:
                 sessioni_gioco.remove(sessione_corrente)
 
-            pagina.add(ft.Text(f"Sessione chiusa per disconnessione di {nickname}"))
             pagina.update()
         
         socket_client.close()
