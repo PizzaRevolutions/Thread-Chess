@@ -6,7 +6,7 @@ Un'applicazione completa cross-platform per giocare a scacchi in multiplayer via
 
 Non vuoi installare Python o configurare l'ambiente? Scarica direttamente i file eseguibili per il tuo sistema operativo dalla sezione **Releases** di GitHub.
 
-[👉 **VAI AI DOWNLOAD (RELEASES)**](./releases)
+[👉 **VAI AI DOWNLOAD (RELEASES)**](https://github.com/PizzaRevolutions/Thread-Chess/releases)
 
 ### Cosa scaricare:
 *   🖥️ **Windows:** Scarica il Setup o i file portatili.
