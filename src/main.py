@@ -27,6 +27,7 @@ class ClientScacchi:
         self.tempo_nero = self.durataTimer
         self.testoTempoBianco = None
         self.testoTempoNero = None
+        self.partitaTerminata = False
 
         # UI Login
         self.campoNickname = ft.TextField(label="Nickname", width=200, text_align=ft.TextAlign.CENTER)
@@ -52,17 +53,73 @@ class ClientScacchi:
     def connetti_al_server(self, evento):
         if not self.campoNickname.value: return
         
-        self.socket_client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.socket_client.connect((INDIRIZZO_SERVER, PORTA_SERVER))
-        self.socket_client.send(self.campoNickname.value.encode())
-        
-        self.mostra_schermata_attesa()
-        # Avvia il thread per ascoltare il server
-        threading.Thread(target=self.cicloRicezione, daemon=True).start()
+        try:
+            self.socket_client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.socket_client.connect((INDIRIZZO_SERVER, PORTA_SERVER))
+            self.socket_client.send(self.campoNickname.value.encode())
+            
+            self.mostra_schermata_attesa()
+            # Avvia il thread per ascoltare il server
+            threading.Thread(target=self.cicloRicezione, daemon=True).start()
+        except Exception as e:
+            print(f"Errore nella connessione: {e}")
+            self.etichettaStatoAttuale.value = f"Errore di connessione: {e}"
+            self.pagina.update()
+            if self.socket_client:
+                try:
+                    self.socket_client.close()
+                except:
+                    pass
+                self.socket_client = None
+
+    def gestisci_disconnessione(self):
+        """Gestisce la disconnessione dal server"""
+        # Se la partita è già terminata e abbiamo già mostrato la schermata finale,
+        # non sovrascriviamo l'interfaccia con il messaggio di disconnessione.
+        if self.partitaTerminata:
+            if self.socket_client:
+                try:
+                    self.socket_client.close()
+                except:
+                    pass
+                self.socket_client = None
+            return
+
+        # Se la connessione cade ma, secondo la nostra scacchiera locale,
+        # la partita risulta già finita, deduciamo il risultato e mostriamo
+        # la schermata finale invece del messaggio generico.
+        try:
+            if self.scacchiera.is_game_over() and self.mioColore is not None:
+                risultato = self.scacchiera.result()  # "1-0", "0-1", "1/2-1/2", ecc.
+                if risultato == "1-0":
+                    messaggio = "Hai vinto!" if self.mioColore == chess.WHITE else "Hai perso!"
+                elif risultato == "0-1":
+                    messaggio = "Hai vinto!" if self.mioColore == chess.BLACK else "Hai perso!"
+                else:
+                    messaggio = "Patta!"
+                self.mostra_schermata_fine_partita(messaggio)
+            else:
+                self.mioTurno = False
+                self.etichettaStatoAttuale.value = "Disconnesso dal server. Ricarica la pagina."
+                self.pagina.update()
+        except Exception:
+            # In caso di problemi usiamo il messaggio di fallback.
+            self.mioTurno = False
+            self.etichettaStatoAttuale.value = "Disconnesso dal server. Ricarica la pagina."
+            self.pagina.update()
+
+        if self.socket_client:
+            try:
+                self.socket_client.close()
+            except:
+                pass
+            self.socket_client = None
 
     def cicloRicezione(self):
         while True:
             try:
+                if not self.socket_client:
+                    break
                 datoRicevuto = self.socket_client.recv(1024).decode()
                 if not datoRicevuto: 
                     break
@@ -93,16 +150,101 @@ class ClientScacchi:
                     parti = datoRicevuto.split("|")
                     if len(parti) >= 2:
                         colore_scaduto = parti[1]
-                        messaggio = "Tempo scaduto per il Bianco" if colore_scaduto == "WHITE" else "Tempo scaduto per il Nero"
-                        self.etichettaStatoAttuale.value = messaggio
-                        self.mioTurno = False
-                        self.pagina.update()
+                        if self.mioColore is not None:
+                            if (self.mioColore == chess.WHITE and colore_scaduto == "WHITE") or (
+                                self.mioColore == chess.BLACK and colore_scaduto == "BLACK"
+                            ):
+                                messaggio = "Hai perso per tempo!"
+                            else:
+                                messaggio = "Hai vinto per tempo!"
+                        else:
+                            messaggio = "Tempo scaduto."
+                        self.mostra_schermata_fine_partita(messaggio)
+                        break
+                elif datoRicevuto.startswith("GAMEOVER|"):
+                    parti = datoRicevuto.split("|")
+                    esito = parti[1] if len(parti) > 1 else ""
+                    if esito == "WIN":
+                        messaggio = "Hai vinto!"
+                    elif esito == "LOSE":
+                        messaggio = "Hai perso!"
+                    elif esito == "DRAW":
+                        messaggio = "Patta!"
+                    elif esito == "OPPONENT_LEFT":
+                        messaggio = "Il tuo avversario ha abbandonato!"
+                    else:
+                        messaggio = "Partita terminata."
+                    self.mostra_schermata_fine_partita(messaggio)
+                    break
                 else:
                     self.mossaAvversario(datoRicevuto)
                     
-            except Exception as errore:
+            except (ConnectionResetError, OSError, BrokenPipeError) as errore:
                 print(f"Disconnesso: {errore}")
+                # Se non siamo già arrivati a una schermata di fine partita,
+                # gestiamo la disconnessione in modo generico.
+                if self.socket_client is not None and not self.partitaTerminata:
+                    self.gestisci_disconnessione()
                 break
+            except Exception as errore:
+                print(f"Errore nella ricezione: {errore}")
+                break
+        # Alla fine chiudiamo il socket se è ancora aperto
+        if self.socket_client:
+            try:
+                self.socket_client.close()
+            except:
+                pass
+            self.socket_client = None
+
+    def mostra_schermata_fine_partita(self, messaggio):
+        """Pulisce la pagina e mostra il risultato della partita con possibilità di nuova partita."""
+        # Segna che la partita è conclusa per evitare messaggi di disconnessione sovrascrittivi
+        self.partitaTerminata = True
+        # Reset stato interno
+        self.mioTurno = False
+        self.casellaSelezionata = None
+        self.mosseValideEvidenziate = []
+        self.scacchiera = chess.Board()
+        self.caselleGrafica = {}
+
+        self.pagina.clean()
+        titolo = ft.Text(messaggio, size=40, weight="bold")
+        bottone_nuova = ft.ElevatedButton(
+            "Gioca un'altra partita",
+            on_click=self.riavvia_partita
+        )
+        bottone_home = ft.TextButton(
+            "Torna al menu principale",
+            on_click=lambda e: self.schermataLogin()
+        )
+        self.pagina.add(
+            ft.Column(
+                [
+                    titolo,
+                    ft.Row(
+                        [bottone_nuova, bottone_home],
+                        alignment=ft.MainAxisAlignment.CENTER,
+                    ),
+                ],
+                alignment=ft.MainAxisAlignment.CENTER,
+                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+            )
+        )
+        self.pagina.update()
+
+    def riavvia_partita(self, evento):
+        """Ricrea una nuova connessione e rimette il giocatore in coda con lo stesso nickname."""
+        # Mantieni il nickname già inserito, se presente
+        if not self.campoNickname.value:
+            # Se per qualche motivo è vuoto, torna al menu standard
+            self.schermataLogin()
+            return
+        # Reimposta timer
+        self.tempo_bianco = self.durataTimer
+        self.tempo_nero = self.durataTimer
+        # Connetti nuovamente al server
+        self.connetti_al_server(evento)
 
     def schermataScacchiera(self):
         self.pagina.clean()
@@ -236,7 +378,11 @@ class ClientScacchi:
     def richiediMosseValide(self, casella):
         """Richiede al server le mosse valide per una casella"""
         if self.socket_client and self.mioTurno:
-            self.socket_client.send(f"MOVES|{casella}".encode())
+            try:
+                self.socket_client.send(f"MOVES|{casella}".encode())
+            except (ConnectionResetError, OSError, BrokenPipeError) as e:
+                print(f"Errore invio richiesta mosse: {e}")
+                self.gestisci_disconnessione()
     
     def clickSuPezzo(self, evento, nomeCasella):
         """Gestisce il click su un pezzo per selezionarlo"""
@@ -284,7 +430,11 @@ class ClientScacchi:
                 self.etichettaStatoAttuale.value = "Turno avversario..."
                 self.pagina.update()
                 
-                self.socket_client.send(mossa.uci().encode())
+                try:
+                    self.socket_client.send(mossa.uci().encode())
+                except (ConnectionResetError, OSError, BrokenPipeError) as e:
+                    print(f"Errore invio mossa: {e}")
+                    self.gestisci_disconnessione()
         # Se clicco su un altro pezzo del mio colore, lo seleziono
         elif nomeCasella in self.caselleGrafica:
             pezzo = self.scacchiera.piece_at(chess.parse_square(nomeCasella))
@@ -321,7 +471,11 @@ class ClientScacchi:
             self.pagina.update()
             
             # INVIO AL SERVER
-            self.socket_client.send(mossa.uci().encode())
+            try:
+                self.socket_client.send(mossa.uci().encode())
+            except (ConnectionResetError, OSError, BrokenPipeError) as e:
+                print(f"Errore invio mossa: {e}")
+                self.gestisci_disconnessione()
         else:
             self.aggiornaPezzi() # Reset visuale in caso di mossa invalida (il pezzo torna indietro)
 

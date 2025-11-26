@@ -11,11 +11,78 @@ DURATA_TIMER = 600  # secondi (10 minuti)
 
 # Liste globali per la gestione
 client_connessi = []
-# Struttura sessioni_gioco: [ (socket_g1, nick_g1), (socket_g2, nick_g2), scacchiera_oggetto ]
+
+# Struttura sessioni_gioco:
+# [
+#   (socket_g1, nick_g1),
+#   (socket_g2, nick_g2) opzionale finché non si accoppia,
+#   scacchiera_oggetto (chess.Board),
+#   timer_info (dict) - opzionale finché non parte la partita
+# ]
 sessioni_gioco = [] 
+
+def notifica_fine_partita(sessione, risultato, pagina):
+    """
+    Invia ai giocatori un messaggio di fine partita in base al risultato.
+    risultato: stringa restituita da chess.Board().result() -> "1-0", "0-1", "1/2-1/2"
+    """
+    if len(sessione) < 2:
+        return
+
+    socket_g1, nick_g1 = sessione[0]
+    socket_g2, nick_g2 = sessione[1]
+
+    if risultato == "1-0":
+        # Bianco vince
+        messaggio_bianco = "GAMEOVER|WIN"
+        messaggio_nero = "GAMEOVER|LOSE"
+    elif risultato == "0-1":
+        # Nero vince
+        messaggio_bianco = "GAMEOVER|LOSE"
+        messaggio_nero = "GAMEOVER|WIN"
+    else:
+        # Patta (es: "1/2-1/2" o altri risultati equivalenti)
+        messaggio_bianco = "GAMEOVER|DRAW"
+        messaggio_nero = "GAMEOVER|DRAW"
+
+    try:
+        socket_g1.send(messaggio_bianco.encode())
+    except:
+        pass
+    try:
+        socket_g2.send(messaggio_nero.encode())
+    except:
+        pass
+
+    pagina.add(ft.Text(f"Partita finita: {risultato}"))
+    pagina.update()
+
+
+def avvisa_avversario_abbandono(sessione, indice_giocatore_che_abbandona):
+    """
+    Avvisa l'avversario che il giocatore si è disconnesso/ha abbandonato.
+    """
+    try:
+        indice_avversario = 1 if indice_giocatore_che_abbandona == 0 else 0
+        if len(sessione) > indice_avversario:
+            socket_avversario = sessione[indice_avversario][0]
+            try:
+                socket_avversario.send("GAMEOVER|OPPONENT_LEFT".encode())
+            except:
+                pass
+            try:
+                socket_avversario.close()
+            except:
+                pass
+    except:
+        pass
+
 
 def gestisci_client(socket_client, indirizzo_ip, pagina):
     nickname = "Sconosciuto"
+    indice_giocatore = -1  # 0 = Bianco, 1 = Nero
+    sessione_corrente = None
+
     try:
         # 1. Ricezione Nickname
         nickname = socket_client.recv(1024).decode('utf-8').strip()
@@ -26,9 +93,6 @@ def gestisci_client(socket_client, indirizzo_ip, pagina):
         pagina.update()
 
         # 2. Matchmaking (Creazione della partita)
-        sessione_corrente = None
-        indice_giocatore = -1 # 0 = Bianco, 1 = Nero
-
         for sessione in sessioni_gioco:
             # Se la sessione ha meno di 2 elementi, significa che c'è un solo giocatore e manca la scacchiera
             if len(sessione) < 2: 
@@ -140,8 +204,16 @@ def gestisci_client(socket_client, indirizzo_ip, pagina):
                     # Controlla fine partita (Scacco matto, stallo, ecc.)
                     if scacchiera.is_game_over():
                         risultato = scacchiera.result()
-                        pagina.add(ft.Text(f"Partita finita: {risultato}"))
-                        pagina.update()
+                        notifica_fine_partita(sessione_corrente, risultato, pagina)
+                        # Chiudo la sessione e le connessioni
+                        if sessione_corrente in sessioni_gioco:
+                            sessioni_gioco.remove(sessione_corrente)
+                        for giocatore in sessione_corrente[:2]:
+                            try:
+                                giocatore[0].close()
+                            except:
+                                pass
+                        break
                     if timer_info_presente:
                         invia_tempo_ai_giocatori(sessione_corrente)
                 else:
@@ -157,9 +229,24 @@ def gestisci_client(socket_client, indirizzo_ip, pagina):
         if (socket_client, nickname) in client_connessi:
             client_connessi.remove((socket_client, nickname))
         
-        # Rimuovi l'intera sessione se uno dei due si disconnette
+        # Se esiste una sessione associata, avvisa l'avversario che questo giocatore ha abbandonato
         if sessione_corrente and sessione_corrente in sessioni_gioco:
-            sessioni_gioco.remove(sessione_corrente)
+            # Calcola l'indice locale del giocatore che sta abbandonando, se non noto lo deduciamo
+            if indice_giocatore not in (0, 1):
+                try:
+                    if sessione_corrente[0][0] is socket_client:
+                        indice_giocatore = 0
+                    elif len(sessione_corrente) > 1 and sessione_corrente[1][0] is socket_client:
+                        indice_giocatore = 1
+                except:
+                    indice_giocatore = -1
+
+            if indice_giocatore in (0, 1):
+                avvisa_avversario_abbandono(sessione_corrente, indice_giocatore)
+
+            if sessione_corrente in sessioni_gioco:
+                sessioni_gioco.remove(sessione_corrente)
+
             pagina.add(ft.Text(f"Sessione chiusa per disconnessione di {nickname}"))
             pagina.update()
         
