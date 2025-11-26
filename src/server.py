@@ -10,17 +10,19 @@ import functools
 # Costanti di rete
 INDIRIZZO_SERVER = "localhost"
 PORTA_SERVER = 5000
-DURATA_TIMER = 10 # 600  # secondi (10 minuti)
+
+# Valori consentiti per la durata del timer (in secondi)
+MODALITA_CONSENTITE = {0, 60, 180, 300, 600, 1200}
 
 # Liste globali per la gestione
 client_connessi = []
 
 # Struttura sessioni_gioco:
 # [
-#   (socket_g1, nick_g1),
-#   (socket_g2, nick_g2) opzionale finché non si accoppia,
+#   (socket_g1, nick_g1, durata_timer),
+#   (socket_g2, nick_g2, durata_timer) opzionale finché non si accoppia,
 #   scacchiera_oggetto (chess.Board),
-#   timer_info (dict) - opzionale finché non parte la partita
+#   timer_info (dict) - opzionale finché non parte la partita (solo se durata_timer > 0)
 # ]
 sessioni_gioco = [] 
 
@@ -147,10 +149,22 @@ def gestisci_client(socket_client, indirizzo_ip, pagina):
     nickname = "Sconosciuto"
     indice_giocatore = -1  # 0 = Bianco, 1 = Nero
     sessione_corrente = None
+    durata_timer_richiesta = 600  # default di sicurezza
 
     try:
-        # 1. Ricezione Nickname
-        nickname = socket_client.recv(1024).decode('utf-8').strip()
+        # 1. Ricezione Nickname + durata timer (formato: "nickname|secondi")
+        prima_risposta = socket_client.recv(1024).decode('utf-8').strip()
+        parti = prima_risposta.split("|")
+        nickname = (parti[0] if parti else "").strip()
+
+        durata_timer_richiesta = 600
+        if len(parti) >= 2:
+            try:
+                durata_parsata = int(float(parti[1]))
+                if durata_parsata in MODALITA_CONSENTITE:
+                    durata_timer_richiesta = durata_parsata
+            except ValueError:
+                pass
 
         # Validazione nickname lato server (sicurezza)
         if not nickname_valido(nickname):
@@ -166,51 +180,60 @@ def gestisci_client(socket_client, indirizzo_ip, pagina):
             pagina.update()
             return
 
-        print(f"[CONNESSO] {nickname} da {indirizzo_ip}")
+        print(f"[CONNESSO] {nickname} da {indirizzo_ip} (timer: {durata_timer_richiesta}s)")
         
-        client_connessi.append((socket_client, nickname))
-        pagina.add(ft.Text(f"{nickname} connesso. In attesa..."))
+        client_connessi.append((socket_client, nickname, durata_timer_richiesta))
+        pagina.add(ft.Text(f"{nickname} connesso. In attesa... (timer: {durata_timer_richiesta}s)"))
         pagina.update()
 
         # 2. Matchmaking (Creazione della partita)
         for sessione in sessioni_gioco:
             # Se la sessione ha meno di 2 elementi, significa che c'è un solo giocatore e manca la scacchiera
-            if len(sessione) < 2: 
-                sessione.insert(1, (socket_client, nickname)) # Mi aggiungo come secondo giocatore
+            # e la durata del timer deve coincidere
+            if len(sessione) < 2:
+                durata_sessione = sessione[0][2]
+                if durata_sessione != durata_timer_richiesta:
+                    continue
+
+                sessione.insert(1, (socket_client, nickname, durata_timer_richiesta)) # Mi aggiungo come secondo giocatore
                 sessione_corrente = sessione
                 indice_giocatore = 1 # Sono il Nero
                 
                 # Ora siamo in 2: Creiamo la Scacchiera e Iniziamo!
                 scacchiera = chess.Board()
                 sessione.append(scacchiera) # La scacchiera diventa l'elemento indice 2
-                timer_info = {
-                    "white_time": DURATA_TIMER,
-                    "black_time": DURATA_TIMER,
-                    "ultimo_tick": time.time()
-                }
-                sessione.append(timer_info)  # Timer info diventa elemento indice 3
+
+                if durata_sessione > 0:
+                    timer_info = {
+                        "white_time": durata_sessione,
+                        "black_time": durata_sessione,
+                        "ultimo_tick": time.time()
+                    }
+                    sessione.append(timer_info)  # Timer info diventa elemento indice 3
                 
                 socket_g1 = sessione[0][0]
                 socket_g2 = sessione[1][0]
                 nick_g1 = sessione[0][1]
                 nick_g2 = sessione[1][1]
                 
-                print(f"START: {nick_g1} vs {nick_g2}")
-                pagina.add(ft.Text(f"PARTITA: {nick_g1} (Bianco) vs {nick_g2} (Nero)"))
+                print(f"START: {nick_g1} vs {nick_g2} (timer: {durata_sessione}s)")
+                pagina.add(ft.Text(f"PARTITA: {nick_g1} (Bianco) vs {nick_g2} (Nero) - timer: {durata_sessione}s"))
                 pagina.update()
 
                 # Invio segnale di start e assegnazione colori
                 socket_g1.send("START|WHITE".encode())
                 socket_g2.send("START|BLACK".encode())
-                invia_tempo_ai_giocatori(sessione)
-                threading.Thread(
-                    target=loop_timer_sessione, args=(sessione, pagina), daemon=True
-                ).start()
+
+                if durata_sessione > 0:
+                    invia_tempo_ai_giocatori(sessione)
+                    threading.Thread(
+                        target=loop_timer_sessione, args=(sessione, pagina), daemon=True
+                    ).start()
                 break
         
         if not sessione_corrente:
-            # Se non ho trovato partite aperte, creo una nuova sessione con me come primo giocatore
-            nuova_sessione = [(socket_client, nickname)] 
+            # Se non ho trovato partite aperte con la stessa durata, creo una nuova sessione con me come primo giocatore
+            nuova_sessione = [(socket_client, nickname, durata_timer_richiesta)] 
             sessioni_gioco.append(nuova_sessione)
             sessione_corrente = nuova_sessione
             indice_giocatore = 0 # Sono il Bianco
@@ -306,8 +329,10 @@ def gestisci_client(socket_client, indirizzo_ip, pagina):
         print(f"Errore {nickname}: {errore}")
     finally:
         # Pulizia sessione in caso di disconnessione
-        if (socket_client, nickname) in client_connessi:
-            client_connessi.remove((socket_client, nickname))
+        # Rimuovi qualunque entry con questo socket, ignorando la durata
+        for entry in list(client_connessi):
+            if entry[0] is socket_client:
+                client_connessi.remove(entry)
         
         # Se esiste una sessione associata, avvisa l'avversario che questo giocatore ha abbandonato
         if sessione_corrente and sessione_corrente in sessioni_gioco:

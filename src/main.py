@@ -23,6 +23,8 @@ class ClientScacchi:
         self.caselleGrafica = {} # Dizionario per mappare le caselle UI
         self.casellaSelezionata = None # Casella del pezzo selezionato
         self.mosseValideEvidenziate = [] # Lista delle caselle con mosse valide evidenziate
+        # Durata timer (in secondi) per la partita corrente.
+        # Viene impostata in base alla modalità scelta nel menu.
         self.durataTimer = 600
         self.tempo_bianco = self.durataTimer
         self.tempo_nero = self.durataTimer
@@ -38,16 +40,42 @@ class ClientScacchi:
             "vaffanculo",
         ]
 
+        # Mappatura modalità -> durata in secondi (0 = nessun timer)
+        self.mappa_modalita_timer = {
+            "600": 600,   # Rapid 10'
+            "1200": 1200, # Classic 20'
+            "300": 300,   # Blitz 5'
+            "180": 180,   # Blitz 3'
+            "60": 60,     # Bullet 1'
+            "0": 0,       # No time
+        }
+        self.valore_modalita_selezionata = "600"  # default Rapid 10'
+
         # UI Login
         self.campoNickname = ft.TextField(label="Nickname", width=200, text_align=ft.TextAlign.CENTER)
         # Campo per selezionare un server diverso da quello di default.
         # Formato consigliato: "indirizzo:porta" (es. "192.168.1.10:5000").
         # Se lasciato vuoto, verranno usati i valori di default definiti sopra.
         self.campoServer = ft.TextField(
-            label="Server",
-            width=200,
+            label="Server (es. 192.168.1.10:5000)",
+            width=220,
             text_align=ft.TextAlign.CENTER,
             value=f"{INDIRIZZO_SERVER}:{PORTA_SERVER}",
+        )
+        # Selettore modalità / timer
+        self.dropdownModalita = ft.Dropdown(
+            label="Modalità di gioco",
+            width=220,
+            value=self.valore_modalita_selezionata,
+            options=[
+                ft.dropdown.Option(key="600", text="Rapid (10 minuti)"),
+                ft.dropdown.Option(key="1200", text="Classic (20 minuti)"),
+                ft.dropdown.Option(key="300", text="Blitz (5 minuti)"),
+                ft.dropdown.Option(key="180", text="Blitz (3 minuti)"),
+                ft.dropdown.Option(key="60", text="Bullet (1 minuto)"),
+                ft.dropdown.Option(key="0", text="No time"),
+            ],
+            on_change=self.on_cambio_modalita,
         )
         self.etichettaStatoAttuale = ft.Text("", size=16, weight="bold", color="red")
         
@@ -60,6 +88,7 @@ class ClientScacchi:
                 ft.Text("Scacchi Online", size=40, weight="bold"),
                 self.campoNickname,
                 self.campoServer,
+                self.dropdownModalita,
                 self.etichettaStatoAttuale,
                 ft.ElevatedButton("Entra in Coda", on_click=self.connetti_al_server),
             ], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER)
@@ -99,6 +128,13 @@ class ClientScacchi:
         self.pagina.update()
         return True
 
+    def on_cambio_modalita(self, evento: ft.ControlEvent):
+        """Aggiorna il valore della modalità selezionata e la durata del timer locale."""
+        valore = evento.control.value or "600"
+        self.valore_modalita_selezionata = valore
+        durata = self.mappa_modalita_timer.get(valore, 600)
+        self.durataTimer = durata
+
     def mostra_schermata_attesa(self):
         self.pagina.clean()
         self.pagina.add(ft.Column([ft.ProgressRing(), ft.Text("In attesa dell'avversario...", size=20)],alignment=ft.MainAxisAlignment.CENTER))
@@ -131,10 +167,16 @@ class ClientScacchi:
                 self.pagina.update()
                 return
 
+        # Aggiorno la durata del timer locale in base alla modalità selezionata
+        durata_selezionata = self.mappa_modalita_timer.get(self.valore_modalita_selezionata, 600)
+        self.durataTimer = durata_selezionata
+
         try:
             self.socket_client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.socket_client.connect((host, porta))
-            self.socket_client.send(self.campoNickname.value.encode())
+            # Invia al server nickname e durata timer (in secondi). 0 = nessun timer.
+            messaggio_iniziale = f"{self.campoNickname.value}|{durata_selezionata}"
+            self.socket_client.send(messaggio_iniziale.encode())
             
             self.mostra_schermata_attesa()
             # Avvia il thread per ascoltare il server
@@ -399,24 +441,40 @@ class ClientScacchi:
         self.etichettaStatoAttuale.value = "Tocca a te!" if self.mioTurno else "Attendi avversario..."
         self.testoTempoBianco = ft.Text("", size=18, weight="bold", color="white")
         self.testoTempoNero = ft.Text("", size=18, weight="bold", color="white")
-        
-        self.pagina.add(
+
+        controlli_principali = [
             self.etichettaStatoAttuale,
-            ft.Row(
-                [
-                    self.testoTempoBianco,
-                    self.testoTempoNero
-                ],
-                alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-                width=400
-            ),
+        ]
+
+        # Mostra la riga dei timer solo se è attivo un timer (> 0)
+        if self.durataTimer > 0:
+            controlli_principali.append(
+                ft.Row(
+                    [
+                        self.testoTempoBianco,
+                        self.testoTempoNero
+                    ],
+                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                    width=400
+                )
+            )
+
+        controlli_principali.append(
             ft.Container(
                 ft.Stack([immagineScacchiera, colonnaGriglia], width=400, height=400), 
                 border=ft.border.all(2, "white")
-            ),
+            )
+        )
+        controlli_principali.append(
             ft.Text(f"Tu sei: {'BIANCO' if self.mioColore == chess.WHITE else 'NERO'}")
         )
-        self.aggiorna_timer_ui(self.tempo_bianco, self.tempo_nero)
+
+        self.pagina.add(*controlli_principali)
+
+        # Inizializza la UI del timer solo se la modalità prevede tempo
+        if self.durataTimer > 0:
+            self.aggiorna_timer_ui(self.tempo_bianco, self.tempo_nero)
+
         self.aggiornaPezzi()
         self.pagina.update()
 
