@@ -4,7 +4,7 @@ import threading
 import chess
 import re
 
-# Costanti di connessione
+# Costanti di connessione (valori di default)
 INDIRIZZO_SERVER = "localhost"
 PORTA_SERVER = 5000
 
@@ -40,6 +40,15 @@ class ClientScacchi:
 
         # UI Login
         self.campoNickname = ft.TextField(label="Nickname", width=200, text_align=ft.TextAlign.CENTER)
+        # Campo per selezionare un server diverso da quello di default.
+        # Formato consigliato: "indirizzo:porta" (es. "192.168.1.10:5000").
+        # Se lasciato vuoto, verranno usati i valori di default definiti sopra.
+        self.campoServer = ft.TextField(
+            label="Server",
+            width=200,
+            text_align=ft.TextAlign.CENTER,
+            value=f"{INDIRIZZO_SERVER}:{PORTA_SERVER}",
+        )
         self.etichettaStatoAttuale = ft.Text("", size=16, weight="bold", color="red")
         
         self.schermataLogin()
@@ -50,6 +59,7 @@ class ClientScacchi:
             ft.Column([
                 ft.Text("Scacchi Online", size=40, weight="bold"),
                 self.campoNickname,
+                self.campoServer,
                 self.etichettaStatoAttuale,
                 ft.ElevatedButton("Entra in Coda", on_click=self.connetti_al_server),
             ], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER)
@@ -102,9 +112,28 @@ class ClientScacchi:
         # Normalizzo il valore (ad es. senza spazi esterni)
         self.campoNickname.value = nickname.strip()
 
+        # Lettura e parsing del server selezionato
+        testo_server = (self.campoServer.value or "").strip()
+        host = INDIRIZZO_SERVER
+        porta = PORTA_SERVER
+        if testo_server:
+            try:
+                if ":" in testo_server:
+                    host_part, porta_part = testo_server.rsplit(":", 1)
+                    host_part = host_part.strip() or host
+                    porta = int(porta_part.strip())
+                    host = host_part
+                else:
+                    # Se non è specificata la porta, uso quella di default
+                    host = testo_server
+            except Exception:
+                self.etichettaStatoAttuale.value = "Formato server non valido. Usa es. 'indirizzo:5000'."
+                self.pagina.update()
+                return
+
         try:
             self.socket_client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self.socket_client.connect((INDIRIZZO_SERVER, PORTA_SERVER))
+            self.socket_client.connect((host, porta))
             self.socket_client.send(self.campoNickname.value.encode())
             
             self.mostra_schermata_attesa()
