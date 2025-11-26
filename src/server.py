@@ -10,7 +10,7 @@ import functools
 # Costanti di rete
 INDIRIZZO_SERVER = "localhost"
 PORTA_SERVER = 5000
-DURATA_TIMER = 600  # secondi (10 minuti)
+DURATA_TIMER = 10 # 600  # secondi (10 minuti)
 
 # Liste globali per la gestione
 client_connessi = []
@@ -363,15 +363,62 @@ def aggiorna_timer(sessione):
     return None
 
 def gestisci_timeout(sessione, colore_scaduto, pagina):
+    """
+    Gestisce la fine della partita per tempo, applicando le regole:
+    - Chi va a zero perde, SE l'avversario ha materiale sufficiente per dare matto in teoria.
+    - Se entrambi i tempi sono a zero -> patta.
+    - Se il giocatore che ha ancora tempo NON ha materiale sufficiente per dare matto -> patta.
+    """
+    if len(sessione) < 4:
+        return
+
+    scacchiera = sessione[2]
+    timer_info = sessione[3]
+
+    # Valori di tempo normalizzati (non negativi)
+    white_time = max(0, float(timer_info.get("white_time", 0)))
+    black_time = max(0, float(timer_info.get("black_time", 0)))
+
+    # Caso: entrambi i tempi a zero → patta
+    if white_time <= 0 and black_time <= 0:
+        pagina.add(ft.Text("Tempo scaduto per entrambi: partita patta (tempo)."))
+        pagina.update()
+        notifica_fine_partita(sessione, "1/2-1/2", pagina)
+    else:
+        # Determina chi ha finito il tempo e chi è l'avversario
+        if colore_scaduto == "WHITE":
+            losing_color = chess.WHITE
+            winning_color = chess.BLACK
+            descrizione = "Bianco"
+        else:
+            losing_color = chess.BLACK
+            winning_color = chess.WHITE
+            descrizione = "Nero"
+
+        pagina.add(ft.Text(f"Tempo scaduto per {descrizione}"))
+        pagina.update()
+
+        # Controllo materiale sufficiente: usiamo la logica di python-chess.
+        # Se la funzione dice che la posizione è a "materiale insufficiente" complessivo
+        # (nessuna delle due parti può dare matto in teoria), allora la partita è patta,
+        # indipendentemente da chi è andato a zero.
+        if scacchiera.is_insufficient_material():
+            risultato = "1/2-1/2"
+        else:
+            # Vittoria al tempo per il colore che ha ancora tempo.
+            risultato = "0-1" if losing_color == chess.WHITE else "1-0"
+
+        notifica_fine_partita(sessione, risultato, pagina)
+
+    # In ogni caso notifichiamo comunque il tipo di timeout esplicito (per compatibilità client)
     messaggio_timeout = f"TIMEOUT|{colore_scaduto}"
-    descrizione = "Bianco" if colore_scaduto == "WHITE" else "Nero"
-    pagina.add(ft.Text(f"Tempo scaduto per {descrizione}"))
-    pagina.update()
     for giocatore in sessione[:2]:
         try:
             giocatore[0].send(messaggio_timeout.encode())
         except:
             pass
+
+    # Chiudiamo la sessione e le connessioni
     if sessione in sessioni_gioco:
         sessioni_gioco.remove(sessione)
     for giocatore in sessione[:2]:

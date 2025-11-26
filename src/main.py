@@ -134,10 +134,12 @@ class ClientScacchi:
                 self.socket_client = None
             return
 
-        # Se la connessione cade ma, secondo la nostra scacchiera locale,
-        # la partita risulta già finita, deduciamo il risultato e mostriamo
-        # la schermata finale invece del messaggio generico.
+        # Se la connessione cade, proviamo prima a dedurre un esito sensato
+        # usando l'informazione locale (scacchiera e timer), così evitiamo
+        # il generico "Disconnesso dal server" nei casi di fine partita.
         try:
+            # 1) Se per le regole degli scacchi la posizione è già finita (matto/stallo)
+            #    usiamo il risultato della scacchiera.
             if self.scacchiera.is_game_over() and self.mioColore is not None:
                 risultato = self.scacchiera.result()  # "1-0", "0-1", "1/2-1/2", ecc.
                 if risultato == "1-0":
@@ -147,7 +149,33 @@ class ClientScacchi:
                 else:
                     messaggio = "Patta!"
                 self.mostra_schermata_fine_partita(messaggio)
+            # 2) Altrimenti, se abbiamo informazioni di timer, deduciamo una
+            #    possibile vittoria/sconfitta/patta per tempo.
+            elif self.mioColore is not None and self.tempo_bianco is not None and self.tempo_nero is not None:
+                # Determina il mio tempo e quello avversario dagli ultimi valori noti
+                if self.mioColore == chess.WHITE:
+                    mio_tempo = self.tempo_bianco
+                    tempo_avversario = self.tempo_nero
+                else:
+                    mio_tempo = self.tempo_nero
+                    tempo_avversario = self.tempo_bianco
+
+                if mio_tempo <= 0 and tempo_avversario > 0:
+                    messaggio = "Hai perso per tempo!"
+                    self.mostra_schermata_fine_partita(messaggio)
+                elif tempo_avversario <= 0 and mio_tempo > 0:
+                    messaggio = "Hai vinto per tempo (tempo avversario esaurito)!"
+                    self.mostra_schermata_fine_partita(messaggio)
+                elif mio_tempo <= 0 and tempo_avversario <= 0:
+                    messaggio = "Patta: tempo esaurito per entrambi."
+                    self.mostra_schermata_fine_partita(messaggio)
+                else:
+                    # Nessuna conclusione chiara: messaggio generico.
+                    self.mioTurno = False
+                    self.etichettaStatoAttuale.value = "Disconnesso dal server. Ricarica la pagina."
+                    self.pagina.update()
             else:
+                # Nessuna informazione sufficiente: messaggio generico.
                 self.mioTurno = False
                 self.etichettaStatoAttuale.value = "Disconnesso dal server. Ricarica la pagina."
                 self.pagina.update()
@@ -199,21 +227,6 @@ class ClientScacchi:
                             self.aggiorna_timer_ui(tempo_bianco, tempo_nero)
                         except ValueError:
                             pass
-                elif datoRicevuto.startswith("TIMEOUT|"):
-                    parti = datoRicevuto.split("|")
-                    if len(parti) >= 2:
-                        colore_scaduto = parti[1]
-                        if self.mioColore is not None:
-                            if (self.mioColore == chess.WHITE and colore_scaduto == "WHITE") or (
-                                self.mioColore == chess.BLACK and colore_scaduto == "BLACK"
-                            ):
-                                messaggio = "Hai perso per tempo!"
-                            else:
-                                messaggio = "Hai vinto per tempo!"
-                        else:
-                            messaggio = "Tempo scaduto."
-                        self.mostra_schermata_fine_partita(messaggio)
-                        break
                 elif datoRicevuto.startswith("GAMEOVER|"):
                     parti = datoRicevuto.split("|")
                     esito = parti[1] if len(parti) > 1 else ""
@@ -229,6 +242,26 @@ class ClientScacchi:
                         messaggio = "Partita terminata."
                     self.mostra_schermata_fine_partita(messaggio)
                     break
+                elif datoRicevuto.startswith("TIMEOUT|"):
+                    # Informazione di compatibilità: il vero esito è già stato inviato
+                    # tramite GAMEOVER|...; se per qualche motivo non è arrivato,
+                    # usiamo comunque un messaggio di tempo scaduto.
+                    if self.partitaTerminata:
+                        continue
+                    parti = datoRicevuto.split("|")
+                    if len(parti) >= 2:
+                        colore_scaduto = parti[1]
+                        if self.mioColore is not None:
+                            if (self.mioColore == chess.WHITE and colore_scaduto == "WHITE") or (
+                                self.mioColore == chess.BLACK and colore_scaduto == "BLACK"
+                            ):
+                                messaggio = "Hai perso per tempo!"
+                            else:
+                                messaggio = "Hai vinto per tempo!"
+                        else:
+                            messaggio = "Tempo scaduto."
+                        self.mostra_schermata_fine_partita(messaggio)
+                        break
                 else:
                     self.mossaAvversario(datoRicevuto)
                     
