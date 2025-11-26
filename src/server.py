@@ -24,7 +24,11 @@ client_connessi = []
 #   scacchiera_oggetto (chess.Board),
 #   timer_info (dict) - opzionale finché non parte la partita (solo se durata_timer > 0)
 # ]
-sessioni_gioco = [] 
+sessioni_gioco = []
+
+# Riferimenti UI per il pannello di amministrazione
+contenitore_sessioni = None  # ft.Column che contiene tutte le session card
+ui_sessioni = {}  # mappa id(sessione) -> dict con controlli UI (card, lista mosse, ecc.)
 
 # Percorso del file con le parole vietate (stessa cartella di questo file)
 BAD_WORDS_FILE = pathlib.Path(__file__).with_name("bad_words.txt")
@@ -96,8 +100,9 @@ def notifica_fine_partita(sessione, risultato, pagina):
     if len(sessione) < 2:
         return
 
-    socket_g1, nick_g1 = sessione[0]
-    socket_g2, nick_g2 = sessione[1]
+    # Gli elementi dei giocatori sono tuple (socket, nickname, durata_timer)
+    socket_g1, nick_g1, _ = sessione[0]
+    socket_g2, nick_g2, _ = sessione[1]
 
     if risultato == "1-0":
         # Bianco vince
@@ -145,6 +150,185 @@ def avvisa_avversario_abbandono(sessione, indice_giocatore_che_abbandona):
         pass
 
 
+def crea_ui_sessione(sessione, durata_sessione, pagina):
+    """
+    Crea una scheda grafica per una nuova sessione:
+    - mostra i giocatori
+    - mostra il timer
+    - contiene lista delle mosse
+    - offre pulsanti per chiudere la sessione o bannare un giocatore
+    """
+    global contenitore_sessioni, ui_sessioni
+    if contenitore_sessioni is None:
+        return
+
+    sid = id(sessione)
+    socket_g1, nick_g1, _ = sessione[0]
+    socket_g2, nick_g2, _ = sessione[1]
+
+    descr_timer = "No time" if durata_sessione == 0 else f"{int(durata_sessione // 60)}' per lato"
+
+    titolo = ft.Text(
+        f"Sessione #{sid} - {nick_g1} (Bianco) vs {nick_g2} (Nero) - {descr_timer}",
+        weight="bold",
+    )
+
+    lista_mosse = ft.ListView(expand=1, spacing=2, padding=5, auto_scroll=True)
+    testo_stato = ft.Text("In corso", color="green")
+
+    def chiudi_sessione_admin(e):
+        chiudi_sessione_da_admin(sessione, motivo="Chiusura manuale (patta)", esito_forzato="DRAW", pagina=pagina)
+
+    def banna_bianco(e):
+        banna_giocatore(sessione, indice_bannato=0, pagina=pagina)
+
+    def banna_nero(e):
+        banna_giocatore(sessione, indice_bannato=1, pagina=pagina)
+
+    pulsanti = ft.Row(
+        [
+            ft.ElevatedButton("Chiudi sessione", on_click=chiudi_sessione_admin),
+            ft.TextButton("Banna Bianco", on_click=banna_bianco),
+            ft.TextButton("Banna Nero", on_click=banna_nero),
+        ],
+        spacing=10,
+    )
+
+    card = ft.Card(
+        content=ft.Container(
+            content=ft.Column(
+                [
+                    titolo,
+                    pulsanti,
+                    ft.Text("Mosse:"),
+                    lista_mosse,
+                    testo_stato,
+                ],
+                spacing=5,
+            ),
+            padding=10,
+        )
+    )
+
+    ui_sessioni[sid] = {
+        "card": card,
+        "lista_mosse": lista_mosse,
+        "testo_stato": testo_stato,
+    }
+
+    contenitore_sessioni.controls.append(card)
+    pagina.update()
+
+
+def log_mossa_sessione(sessione, nickname, mossa_uci, pagina):
+    """Aggiunge una riga di log delle mosse nella sessione, se ha una UI."""
+    global ui_sessioni
+    sid = id(sessione)
+    ui = ui_sessioni.get(sid)
+    if not ui:
+        return
+    testo = ft.Text(f"{nickname}: {mossa_uci}")
+    ui["lista_mosse"].controls.append(testo)
+    pagina.update()
+
+
+def marca_sessione_chiusa(sessione, testo, colore="red", pagina=None):
+    """Aggiorna lo stato visivo di una sessione quando viene chiusa."""
+    global ui_sessioni, contenitore_sessioni
+    sid = id(sessione)
+    ui = ui_sessioni.get(sid)
+    if not ui:
+        return
+    ui["testo_stato"].value = testo
+    ui["testo_stato"].color = colore
+    if pagina:
+        pagina.update()
+
+
+def chiudi_sessione_da_admin(sessione, motivo, esito_forzato, pagina):
+    """
+    Chiusura anticipata della sessione da parte dell'admin.
+    esito_forzato: "DRAW" per patta amministrativa.
+    """
+    if len(sessione) < 2:
+        return
+
+    try:
+        socket_g1, nick_g1, _ = sessione[0]
+        socket_g2, nick_g2, _ = sessione[1]
+
+        if esito_forzato == "DRAW":
+            mess1 = "GAMEOVER|DRAW"
+            mess2 = "GAMEOVER|DRAW"
+        else:
+            mess1 = "GAMEOVER|DRAW"
+            mess2 = "GAMEOVER|DRAW"
+
+        try:
+            socket_g1.send(mess1.encode())
+        except:
+            pass
+        try:
+            socket_g2.send(mess2.encode())
+        except:
+            pass
+
+        try:
+            socket_g1.close()
+        except:
+            pass
+        try:
+            socket_g2.close()
+        except:
+            pass
+    finally:
+        if sessione in sessioni_gioco:
+            sessioni_gioco.remove(sessione)
+        marca_sessione_chiusa(sessione, f"Chiusa: {motivo}", pagina=pagina)
+
+
+def banna_giocatore(sessione, indice_bannato, pagina):
+    """
+    Banna un giocatore:
+    - il bannato perde
+    - l'altro vince
+    - la sessione viene chiusa
+    """
+    if len(sessione) < 2:
+        return
+
+    vincitore = 1 - indice_bannato
+    try:
+        socket_bannato, nick_bannato, _ = sessione[indice_bannato]
+        socket_vincitore, nick_vincitore, _ = sessione[vincitore]
+
+        try:
+            socket_bannato.send("GAMEOVER|LOSE".encode())
+        except:
+            pass
+        try:
+            socket_vincitore.send("GAMEOVER|WIN".encode())
+        except:
+            pass
+
+        try:
+            socket_bannato.close()
+        except:
+            pass
+        try:
+            socket_vincitore.close()
+        except:
+            pass
+    finally:
+        if sessione in sessioni_gioco:
+            sessioni_gioco.remove(sessione)
+        marca_sessione_chiusa(
+            sessione,
+            f"Chiusura: {nick_bannato} bannato, vittoria a {nick_vincitore}",
+            pagina=pagina,
+        )
+
+
 def gestisci_client(socket_client, indirizzo_ip, pagina):
     nickname = "Sconosciuto"
     indice_giocatore = -1  # 0 = Bianco, 1 = Nero
@@ -183,7 +367,6 @@ def gestisci_client(socket_client, indirizzo_ip, pagina):
         print(f"[CONNESSO] {nickname} da {indirizzo_ip} (timer: {durata_timer_richiesta}s)")
         
         client_connessi.append((socket_client, nickname, durata_timer_richiesta))
-        pagina.add(ft.Text(f"{nickname} connesso. In attesa... (timer: {durata_timer_richiesta}s)"))
         pagina.update()
 
         # 2. Matchmaking (Creazione della partita)
@@ -217,8 +400,10 @@ def gestisci_client(socket_client, indirizzo_ip, pagina):
                 nick_g2 = sessione[1][1]
                 
                 print(f"START: {nick_g1} vs {nick_g2} (timer: {durata_sessione}s)")
-                pagina.add(ft.Text(f"PARTITA: {nick_g1} (Bianco) vs {nick_g2} (Nero) - timer: {durata_sessione}s"))
                 pagina.update()
+
+                # Crea la scheda grafica per questa nuova sessione
+                crea_ui_sessione(sessione, durata_sessione, pagina)
 
                 # Invio segnale di start e assegnazione colori
                 socket_g1.send("START|WHITE".encode())
@@ -298,6 +483,8 @@ def gestisci_client(socket_client, indirizzo_ip, pagina):
                     # VALIDAZIONE OK: Eseguiamo la mossa sulla scacchiera del Server
                     scacchiera.push(mossa)
                     print(f"Mossa valida {messaggio} da {nickname}. Inoltro...")
+                    # Log grafico della mossa
+                    log_mossa_sessione(sessione_corrente, nickname, messaggio, pagina)
                     
                     # Inoltra la mossa all'AVVERSARIO
                     indice_avversario = 1 if indice_giocatore == 0 else 0
@@ -471,7 +658,6 @@ def avvia_server(pagina):
     socket_server.bind((INDIRIZZO_SERVER, PORTA_SERVER))
     socket_server.listen()
     
-    pagina.add(ft.Text(f"SERVER AUTOREVOLE AVVIATO SU {INDIRIZZO_SERVER}:{PORTA_SERVER}"))
     pagina.update()
     
     while True:
@@ -479,7 +665,27 @@ def avvia_server(pagina):
         threading.Thread(target=gestisci_client, args=(client, indirizzo, pagina), daemon=True).start()
 
 def main(pagina: ft.Page):
-    pagina.title = "Server Scacchi (Autorevole)"
+    global contenitore_sessioni
+    pagina.title = f"Server Scacchi ({INDIRIZZO_SERVER}:{PORTA_SERVER})"    
+
+    # Pannello superiore di info generali
+    intestazione = ft.Column(
+        [
+            ft.Text(f"Server Scacchi ({INDIRIZZO_SERVER}:{PORTA_SERVER})", size=24, weight="bold"),
+            ft.Text("Sessioni attive e strumenti di moderazione:", size=16),
+        ],
+        spacing=5,
+    )
+
+    contenitore_sessioni = ft.Column(spacing=10, expand=1)
+
+    pagina.add(
+        intestazione,
+        ft.Divider(),
+        contenitore_sessioni,
+    )
+    pagina.update()
+
     # Avvia il server in un thread separato per non bloccare la GUI di Flet
     threading.Thread(target=avvia_server, args=(pagina,), daemon=True).start()
 
