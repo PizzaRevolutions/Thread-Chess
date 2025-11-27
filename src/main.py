@@ -82,6 +82,7 @@ class ClientScacchi:
         self.schermataLogin()
 
     def schermataLogin(self):
+        self.pagina.overlay.clear()
         self.pagina.clean()
         self.pagina.add(
             ft.Column([
@@ -420,6 +421,35 @@ class ClientScacchi:
         # Connetti nuovamente al server
         self.connetti_al_server(evento)
 
+    def abbandona_partita(self, e):
+        # 1. Chiudi visivamente il popup
+        self.dialogo_abbandono.open = False
+        self.pagina.overlay.clear()
+        self.pagina.update()
+        
+        # 2. Segnala partita terminata localmente
+        self.partitaTerminata = True
+        
+        # 3. Chiudi il socket (il server assegna vittoria all'altro)
+        if self.socket_client:
+            try:
+                self.socket_client.close()
+            except:
+                pass
+            self.socket_client = None
+
+        # 4. RESET TOTALE DELLO STATO
+        self.scacchiera = chess.Board()
+        self.caselleGrafica = {}
+        self.mioTurno = False
+        self.casellaSelezionata = None
+        self.mosseValideEvidenziate = []
+        
+        self.partitaTerminata = False 
+
+        # 5. Torna al menu (che farà overlay.clear())
+        self.schermataLogin()
+
     def schermataScacchiera(self):
         self.pagina.clean()
         self.tempo_bianco = self.durataTimer
@@ -443,6 +473,43 @@ class ClientScacchi:
 
         righe = range(7, -1, -1) if self.mioColore == chess.WHITE else range(8)
         colonne = range(8) if self.mioColore == chess.WHITE else range(7, -1, -1)
+
+        # Funzione per chiudere (nascondere) il popup
+        def chiudi_popup(e):
+            self.dialogo_abbandono.open = False
+            self.pagina.update()
+
+        self.dialogo_abbandono = ft.AlertDialog(
+            modal=True,
+            title=ft.Text("Conferma Abbandono"),
+            content=ft.Text("Sei sicuro di voler abbandonare la partita? Perderai la gara."),
+            actions=[
+                ft.TextButton("No", on_click=chiudi_popup),
+                ft.TextButton("Sì, Abbandona", on_click=self.abbandona_partita),
+            ],
+            actions_alignment=ft.MainAxisAlignment.END,
+        )
+
+        # 1. Aggiungiamo il dialog all'overlay SUBITO, appena creiamo la schermata.
+        #    Così è già lì, pronto per essere mostrato.
+        self.pagina.overlay.append(self.dialogo_abbandono)
+
+        # Funzione per aprire (mostrare) il popup
+        def apri_popup(e):
+            # Non facciamo append qui! È già nell'overlay.
+            self.dialogo_abbandono.open = True
+            self.pagina.update()
+
+        # --- Tasto Resa ---
+        bottone_resa = ft.IconButton(
+            icon="flag",
+            icon_color="red",
+            tooltip="Abbandona Partita",
+            on_click=apri_popup
+        )
+
+        header_resa = ft.Row([bottone_resa], alignment=ft.MainAxisAlignment.START)
+
 
         for riga_idx in righe:
             rigaComponenti = []
@@ -488,7 +555,7 @@ class ClientScacchi:
         self.testoTempoBianco = ft.Text("", size=18, weight="bold", color="white")
         self.testoTempoNero   = ft.Text("", size=18, weight="bold", color="white")
 
-        controlli_principali = [self.etichettaStatoAttuale]
+        controlli_principali = [header_resa, self.etichettaStatoAttuale]
 
         if self.durataTimer > 0:
             controlli_principali.append(
