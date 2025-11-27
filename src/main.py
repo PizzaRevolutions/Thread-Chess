@@ -424,64 +424,99 @@ class ClientScacchi:
         self.pagina.clean()
         self.tempo_bianco = self.durataTimer
         self.tempo_nero = self.durataTimer
-        immagineScacchiera = ft.Image(src="board.png", width=400, height=400, fit=ft.ImageFit.FILL)
-        colonnaGriglia = ft.Column(spacing=0, width=400, height=400)
-        
-        # Orientamento scacchiera (Se sono bianco vedo 1 in basso, se nero vedo 8 in basso)
+
+        # Board esattamente 400x400
+        immagineScacchiera = ft.Image(
+            src="board.png",
+            width=400,
+            height=400,
+            fit=ft.ImageFit.FILL
+        )
+
+        # Griglia perfettamente sovrapposta
+        colonnaGriglia = ft.Column(
+            spacing=0,
+            width=400,
+            height=400,
+            tight=True   # fondamentale
+        )
+
         righe = range(7, -1, -1) if self.mioColore == chess.WHITE else range(8)
         colonne = range(8) if self.mioColore == chess.WHITE else range(7, -1, -1)
 
         for riga_idx in righe:
             rigaComponenti = []
+
             for colonna_idx in colonne:
-                # Calcola il nome della casella (es. "e4")
                 nomeCasella = chess.square_name(chess.square(colonna_idx, riga_idx))
-                
-                contenitore = ft.Container(width=50, height=50, alignment=ft.alignment.center)
-                
-                # Zona di rilascio per il Drag & Drop e click
+
+                # Questo container rappresenta esattamente la cella 50x50
+                slot = ft.Container(
+                    width=50,
+                    height=50,
+                    alignment=ft.alignment.center
+                )
+
                 bersaglio = ft.GestureDetector(
                     content=ft.DragTarget(
-                        group="scacchi", 
-                        content=contenitore, 
-                        on_accept=self.rilascioPezzo, 
+                        group="scacchi",
+                        content=slot,
+                        on_accept=self.rilascioPezzo,
                         data=nomeCasella
                     ),
                     on_tap=lambda e, casella=nomeCasella: self.clickSuCasella(e, casella)
                 )
-                
-                self.caselleGrafica[nomeCasella] = contenitore
+
+                self.caselleGrafica[nomeCasella] = slot
                 rigaComponenti.append(bersaglio)
-            
-            colonnaGriglia.controls.append(ft.Row(controls=rigaComponenti, spacing=0))
 
-        self.etichettaStatoAttuale.value = "Tocca a te!" if self.mioTurno else "Attendi avversario..."
+            # Ogni riga deve essere esattamente 400px, senza respiro
+            colonnaGriglia.controls.append(
+                ft.Row(
+                    controls=rigaComponenti,
+                    spacing=0,
+                    width=400,
+                    height=50,
+                    tight=True    # vitale
+                )
+            )
+
+        self.etichettaStatoAttuale.value = (
+            "Tocca a te!" if self.mioTurno else "Attendi avversario..."
+        )
+
         self.testoTempoBianco = ft.Text("", size=18, weight="bold", color="white")
-        self.testoTempoNero = ft.Text("", size=18, weight="bold", color="white")
+        self.testoTempoNero   = ft.Text("", size=18, weight="bold", color="white")
 
-        controlli_principali = [
-            self.etichettaStatoAttuale,
-        ]
+        controlli_principali = [self.etichettaStatoAttuale]
 
-        # Mostra la riga dei timer solo se è attivo un timer (> 0)
         if self.durataTimer > 0:
             controlli_principali.append(
                 ft.Row(
-                    [
-                        self.testoTempoBianco,
-                        self.testoTempoNero
-                    ],
+                    [self.testoTempoBianco, self.testoTempoNero],
                     alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
                     width=400
                 )
             )
 
+    # Nessun padding tra board e overlay, altrimenti sfasa tutto
         controlli_principali.append(
             ft.Container(
-                ft.Stack([immagineScacchiera, colonnaGriglia], width=400, height=400), 
-                border=ft.border.all(2, "white")
+                ft.Stack(
+                    [   
+                        immagineScacchiera,
+                        colonnaGriglia
+                    ],
+                    width=400,
+                    height=400
+                ),
+                border=ft.border.all(2, "white"),
+                # tolgo il padding interno per non spostare la griglia
+                padding=0,
+                margin=ft.margin.symmetric(horizontal=12)
             )
         )
+
         testo_colore = f"Tu sei: {'BIANCO' if self.mioColore == chess.WHITE else 'NERO'}"
         testo_modalita = f"Modalità: {self.nome_modalita_corrente()}"
         controlli_principali.append(
@@ -503,52 +538,92 @@ class ClientScacchi:
         for nomeCasella, contenitore in self.caselleGrafica.items():
             pezzo = mappaPezzi.get(chess.parse_square(nomeCasella))
             
-            # Determina il colore di sfondo della casella
-            bgcolor = None
-            border = None
-            
-            # Evidenzia la casella selezionata
+            # Differenzia casella selezionata (bg) da mosse valide (marker)
+            marker_control = None
+            # default: no border/bg
+            contenitore.bgcolor = None
+            contenitore.border = None
+
+            # Se è la casella selezionata:
             if nomeCasella == self.casellaSelezionata:
-                bgcolor = "#4CAF50"  # Verde per la casella selezionata
-                border = ft.border.all(3, "#2E7D32")
-            # Evidenzia le caselle con mosse valide
+                contenitore.bgcolor = "#D1F2FFFF"  
+                contenitore.border = ft.border.all(4, "#7EA0A1")
+            # Se è una mossa valida, distingui se è una cattura
             elif nomeCasella in self.mosseValideEvidenziate:
-                bgcolor = "#81C784"  # Verde chiaro per mosse valide
-                border = ft.border.all(2, "#66BB6A")
-            
-            # Aggiorna lo sfondo del contenitore
-            contenitore.bgcolor = bgcolor
-            contenitore.border = border
-            
+                is_capture = False
+                try:
+                    if self.casellaSelezionata:
+                        mv = self.scacchiera.find_move(
+                            chess.parse_square(self.casellaSelezionata),
+                            chess.parse_square(nomeCasella),
+                        )
+                        is_capture = self.scacchiera.is_capture(mv)
+                except Exception:
+                    # fallback: se nella casella di destinazione è presente un pezzo, considerala capture
+                    try:
+                        dest_piece = self.scacchiera.piece_at(chess.parse_square(nomeCasella))
+                        is_capture = dest_piece is not None
+                    except Exception:
+                        is_capture = False
+
+                # usa immagini diverse per capture vs normale
+                if is_capture:
+                    marker_control = ft.Image(src="selected_marker.png", width=48, height=48, fit=ft.ImageFit.CONTAIN)
+                else:
+                    marker_control = ft.Image(src="move_marker.png", width=48, height=48, fit=ft.ImageFit.CONTAIN)
+
             contenitore.content = None
-            
+
             if pezzo:
                 # Esempio nome file: wP.png (White Pawn) o bK.png (Black King)
-                nomeImgPezzo = f"{'w' if pezzo.color else 'b'}{pezzo.symbol().upper()}.png"
+                nomeImgPezzo = f"{ 'w' if pezzo.color else 'b' }{pezzo.symbol().upper()}.png"
                 immaginePezzo = ft.Image(src=nomeImgPezzo, width=40, height=40)
-                
-                # Rendi il pezzo trascinabile solo se è del mio colore
+
+                # Se c'è un marker, mettilo dietro al pezzo usando Stack
                 if pezzo.color == self.mioColore:
                     immaginePezzoDrag = ft.Image(src=nomeImgPezzo, width=60, height=60)
-                    # Aggiungi GestureDetector per gestire il click
                     draggable = ft.Draggable(
-                        group="scacchi", 
-                        content=immaginePezzo, 
-                        content_when_dragging=ft.Container(content=immaginePezzoDrag, opacity=0.5), 
+                        group="scacchi",
+                        content=immaginePezzo,
+                        content_when_dragging=ft.Container(content=immaginePezzoDrag, opacity=0.5),
                         data=nomeCasella
                     )
-                    contenitore.content = ft.GestureDetector(
-                        content=draggable,
-                        on_tap=lambda e, casella=nomeCasella: self.clickSuPezzo(e, casella)
-                    )
+                    if marker_control:
+                        contenitore.content = ft.GestureDetector(
+                            content=ft.Stack(
+                                controls=[
+                                    ft.Container(content=marker_control, width=50, height=50, alignment=ft.alignment.center),
+                                    ft.Container(content=draggable, width=50, height=50, alignment=ft.alignment.center),
+                                ],
+                                width=50,
+                                height=50,
+                            ),
+                            on_tap=lambda e, casella=nomeCasella: self.clickSuPezzo(e, casella)
+                        )
+                    else:
+                        contenitore.content = ft.GestureDetector(
+                            content=draggable,
+                            on_tap=lambda e, casella=nomeCasella: self.clickSuPezzo(e, casella)
+                        )
                 else:
-                    contenitore.content = immaginePezzo
+                    if marker_control:
+                        contenitore.content = ft.Stack(
+                            controls=[
+                                ft.Container(content=marker_control, width=50, height=50, alignment=ft.alignment.center),
+                                ft.Container(content=immaginePezzo, width=50, height=50, alignment=ft.alignment.center),
+                            ],
+                            width=50,
+                            height=50,
+                        )
+                    else:
+                        contenitore.content = immaginePezzo
             else:
-                # Se non c'è pezzo, mantieni l'evidenziazione se necessario
-                if nomeCasella not in self.mosseValideEvidenziate and nomeCasella != self.casellaSelezionata:
-                    contenitore.bgcolor = None
+                # Se non c'è pezzo, mostra il marker se presente
+                if marker_control:
+                    contenitore.content = ft.Container(content=marker_control, alignment=ft.alignment.center)
+                else:
+                    # nessun pezzo e nessun marker -> rimuovi bordo
                     contenitore.border = None
-                # Altrimenti l'evidenziazione è già stata impostata sopra
         self.pagina.update()
 
     def formatta_tempo(self, secondi):
