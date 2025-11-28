@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  flet-server:
+    build:
+      context: https://github.com/PizzaRevolutions/Thread-Chess.git#main
+      dockerfile: Dockerfile
+    container_name: thread-chess-server
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - FLET_FORCE_WEB_SERVER=true
+    restart: unless-stopped
