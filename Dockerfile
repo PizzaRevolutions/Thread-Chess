@@ -15,4 +15,4 @@ COPY . .
 EXPOSE 8000
 
 # Avvia il server in modalità web
-CMD ["python", "src/server.py"]
+CMD ["flet", "run", "--web", "src/server.py"]
