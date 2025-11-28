@@ -9,7 +9,7 @@ import functools
 
 # Costanti di rete
 INDIRIZZO_SERVER = "localhost"
-PORTA_SERVER = 8000
+PORTA_SERVER = 5000
 
 # Valori consentiti per la durata del timer (in secondi)
 MODALITA_CONSENTITE = {0, 60, 180, 300, 600, 1200}
