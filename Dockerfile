@@ -12,7 +12,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Esponi porta per il server
-EXPOSE 8000
+EXPOSE 5000
 
 # Avvia il server in modalità web
 CMD ["flet", "run", "--web", "src/server.py"]
