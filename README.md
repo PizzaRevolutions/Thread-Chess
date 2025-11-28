@@ -9,7 +9,7 @@ Non vuoi installare Python o configurare l'ambiente? Scarica direttamente i file
 [👉 **VAI AI DOWNLOAD (RELEASES)**](https://github.com/PizzaRevolutions/Thread-Chess/releases)
 
 ### Cosa scaricare:
-*   🖥️ **Windows:** Scarica il Setup o i file portatili.
+*   🖥️ **Windows:** Scarica il file `.exe` e eseguilo sul tuo dispositivo.
 *   📱 **Android:** Scarica il file `.apk` e installalo sul tuo dispositivo.
 
 ---
@@ -30,7 +30,7 @@ Non vuoi installare Python o configurare l'ambiente? Scarica direttamente i file
 
 Se hai scaricato i file dalla sezione Releases:
 
-1.  **Avvia il Server:** Apri il file `server` (o `server.exe`). Vedrai una finestra o un terminale che indica l'attesa di connessioni.
+1.  **Avvia il Server:** Apri il file `Server.exe`. Vedrai una finestra o un terminale che indica l'attesa di connessioni.
 2.  **Avvia i Client:**
     *   Esegui l'applicazione su due dispositivi o finestre diverse.
     *   Inserisci un Nickname e connettiti.
