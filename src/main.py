@@ -12,7 +12,6 @@ class ClientScacchi:
     def __init__(self, pagina: ft.Page):
         self.pagina = pagina
         self.pagina.title = "Client Scacchi"
-        self.pagina.bgcolor = "#263238"
         self.pagina.vertical_alignment = ft.MainAxisAlignment.CENTER
         self.pagina.horizontal_alignment = ft.CrossAxisAlignment.CENTER
         
