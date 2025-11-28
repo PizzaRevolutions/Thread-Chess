@@ -52,33 +52,47 @@ class ClientScacchi:
         self.valore_modalita_selezionata = "600"  # default Rapid 10'
 
         # UI Login
-        self.campoNickname = ft.TextField(label="Nickname", width=200, text_align=ft.TextAlign.CENTER)
+        self.campoNickname = ft.TextField(label="Nickname", width=250, text_align=ft.TextAlign.CENTER)
         # Campo per selezionare un server diverso da quello di default.
         # Formato consigliato: "indirizzo:porta" (es. "192.168.1.10:5000").
         # Se lasciato vuoto, verranno usati i valori di default definiti sopra.
         self.campoServer = ft.TextField(
             label="Server (es. 192.168.1.10:5000)",
-            width=220,
+            width=250,
             text_align=ft.TextAlign.CENTER,
             value=f"{INDIRIZZO_SERVER}:{PORTA_SERVER}",
         )
+        # Funzione helper per creare l'opzione con immagine personalizzata
+        def opzione_con_immagine(key, text, image_path):
+            return ft.dropdown.Option(
+                key=key,
+                content=ft.Row(
+                    [
+                        ft.Image(src=image_path, width=20, height=20), # La tua icona PNG
+                        ft.Text(text),                                 # Il testo dell'opzione
+                    ],
+                    alignment=ft.MainAxisAlignment.START,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                ),
+                # È importante lasciare anche 'text' per la visualizzazione quando il menu è chiuso
+                text=text 
+            )
         # Selettore modalità / timer
         self.dropdownModalita = ft.Dropdown(
             label="Modalità di gioco",
-            width=220,
+            width=250,
             value=self.valore_modalita_selezionata,
             options=[
-                ft.dropdown.Option(key="600", text="Rapid (10 minuti)"),
-                ft.dropdown.Option(key="1200", text="Classic (20 minuti)"),
-                ft.dropdown.Option(key="300", text="Blitz (5 minuti)"),
-                ft.dropdown.Option(key="180", text="Blitz (3 minuti)"),
-                ft.dropdown.Option(key="60", text="Bullet (1 minuto)"),
-                ft.dropdown.Option(key="0", text="No time"),
+                opzione_con_immagine(key="600", text="Rapid (10 minuti)", image_path="rapid.png"),
+                opzione_con_immagine(key="1200", text="Classic (20 minuti)", image_path="classic.png"),
+                opzione_con_immagine(key="300", text="Blitz (5 minuti)", image_path="blitz.png"),
+                opzione_con_immagine(key="180", text="Blitz (3 minuti)", image_path="blitz.png"),
+                opzione_con_immagine(key="60", text="Bullet (1 minuto)", image_path="bullet.png"),
+                opzione_con_immagine(key="0", text="No time", image_path="no_time.png"),
             ],
             on_change=self.on_cambio_modalita,
         )
         self.etichettaStatoAttuale = ft.Text("", size=16, weight="bold", color="red")
-        
         self.schermataLogin()
 
     def schermataLogin(self):
