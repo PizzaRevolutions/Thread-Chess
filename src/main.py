@@ -3,6 +3,7 @@ import socket
 import threading
 import chess
 import re
+import time
 
 # Costanti di connessione (valori di default)
 INDIRIZZO_SERVER = "localhost"
@@ -496,15 +497,24 @@ class ClientScacchi:
         self.connetti_al_server(evento)
 
     def abbandona_partita(self, e):
-        # 1. Chiudi visivamente il popup
+        # 1. Chiudi "logicamente" il dialog per avviare la chiusura
         self.dialogo_abbandono.open = False
+        time.sleep(0.3)
+        self.pagina.update() 
+
+        # 2. Rimuovi BRUTALMENTE il dialog dall'overlay
+        # Questo distrugge l'oggetto dialog e la sua barriera associata
         self.pagina.overlay.clear()
-        self.pagina.update()
+        time.sleep(0.3)
         
-        # 2. Segnala partita terminata localmente
+        # 3. UPDATE FONDAMENTALE:
+        # Questo ridisegna la pagina "pulita" (senza dialog e senza ombra)
+        # È vitale farlo PRIMA di chiamare schermataLogin()
+        self.pagina.update()
+
+        # 4. Logica di gioco (disconnessione, reset variabili)
         self.partitaTerminata = True
         
-        # 3. Chiudi il socket (il server assegna vittoria all'altro)
         if self.socket_client:
             try:
                 self.socket_client.close()
@@ -512,16 +522,14 @@ class ClientScacchi:
                 pass
             self.socket_client = None
 
-        # 4. RESET TOTALE DELLO STATO
         self.scacchiera = chess.Board()
         self.caselleGrafica = {}
         self.mioTurno = False
         self.casellaSelezionata = None
         self.mosseValideEvidenziate = []
-        
         self.partitaTerminata = False 
 
-        # 5. Torna al menu (che farà overlay.clear())
+        # 5. Adesso che la grafica è pulita, carichiamo la Login
         self.schermataLogin()
 
     def schermataScacchiera(self):

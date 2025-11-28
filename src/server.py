@@ -223,6 +223,18 @@ def crea_ui_sessione(sessione, durata_sessione, pagina):
     pagina.update()
 
 
+def log_mossa_sessione(sessione, nickname, mossa, pagina):
+    """Aggiunge una mossa alla lista delle mosse della UI admin"""
+    global ui_sessioni
+    sid = id(sessione)
+    ui = ui_sessioni.get(sid)
+    if not ui:
+        return
+    testo = ft.Text(f"{nickname}: {mossa}", size=12)
+    ui["lista_mosse"].controls.append(testo)
+    pagina.update()
+
+
 def log_chat_sessione(sessione, mittente, messaggio, pagina):
     """Aggiunge un messaggio alla chat della UI admin"""
     global ui_sessioni
@@ -617,7 +629,6 @@ def gestisci_timeout(sessione, colore_scaduto, pagina):
 
     # Caso: entrambi i tempi a zero → patta
     if white_time <= 0 and black_time <= 0:
-        pagina.add(ft.Text("Tempo scaduto per entrambi: partita patta (tempo)."))
         pagina.update()
         notifica_fine_partita(sessione, "1/2-1/2", pagina)
     else:
