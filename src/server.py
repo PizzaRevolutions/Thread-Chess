@@ -152,11 +152,7 @@ def avvisa_avversario_abbandono(sessione, indice_giocatore_che_abbandona):
 
 def crea_ui_sessione(sessione, durata_sessione, pagina):
     """
-    Crea una scheda grafica per una nuova sessione:
-    - mostra i giocatori
-    - mostra il timer
-    - contiene lista delle mosse
-    - offre pulsanti per chiudere la sessione o bannare un giocatore
+    Crea una scheda grafica per una nuova sessione.
     """
     global contenitore_sessioni, ui_sessioni
     if contenitore_sessioni is None:
@@ -173,7 +169,11 @@ def crea_ui_sessione(sessione, durata_sessione, pagina):
         weight="bold",
     )
 
-    lista_mosse = ft.ListView(expand=1, spacing=2, padding=5, auto_scroll=True)
+    # UI Mosse
+    lista_mosse = ft.ListView(expand=1, spacing=2, padding=5, auto_scroll=True, height=100)
+    # UI Chat (NUOVO)
+    lista_chat = ft.ListView(expand=1, spacing=2, padding=5, auto_scroll=True, height=100)
+    
     testo_stato = ft.Text("In corso", color="green")
 
     def chiudi_sessione_admin(e):
@@ -200,8 +200,10 @@ def crea_ui_sessione(sessione, durata_sessione, pagina):
                 [
                     titolo,
                     pulsanti,
-                    ft.Text("Mosse:"),
-                    lista_mosse,
+                    ft.Text("Mosse:", weight="bold"),
+                    ft.Container(content=lista_mosse, border=ft.border.all(1, "grey"), border_radius=5, height=100),
+                    ft.Text("Chat:", weight="bold"),
+                    ft.Container(content=lista_chat, border=ft.border.all(1, "grey"), border_radius=5, height=100),
                     testo_stato,
                 ],
                 spacing=5,
@@ -213,6 +215,7 @@ def crea_ui_sessione(sessione, durata_sessione, pagina):
     ui_sessioni[sid] = {
         "card": card,
         "lista_mosse": lista_mosse,
+        "lista_chat": lista_chat, # Salviamo il riferimento
         "testo_stato": testo_stato,
     }
 
@@ -220,15 +223,15 @@ def crea_ui_sessione(sessione, durata_sessione, pagina):
     pagina.update()
 
 
-def log_mossa_sessione(sessione, nickname, mossa_uci, pagina):
-    """Aggiunge una riga di log delle mosse nella sessione, se ha una UI."""
+def log_chat_sessione(sessione, mittente, messaggio, pagina):
+    """Aggiunge un messaggio alla chat della UI admin"""
     global ui_sessioni
     sid = id(sessione)
     ui = ui_sessioni.get(sid)
     if not ui:
         return
-    testo = ft.Text(f"{nickname}: {mossa_uci}")
-    ui["lista_mosse"].controls.append(testo)
+    testo = ft.Text(f"[{mittente}]: {messaggio}", size=12)
+    ui["lista_chat"].controls.append(testo)
     pagina.update()
 
 
@@ -446,7 +449,29 @@ def gestisci_client(socket_client, indirizzo_ip, pagina):
             # indice_giocatore è 0 per il Bianco, 1 per il Nero
             e_turno_bianco = scacchiera.turn
             sono_il_bianco = (indice_giocatore == 0)
-            
+            # Gestione CHAT
+            if messaggio.startswith("CHAT|"):
+                try:
+                    # Dividiamo solo alla prima pipe, così il messaggio può contenere pipe
+                    _, contenuto_chat = messaggio.split("|", 1)
+                    contenuto_chat = contenuto_chat.strip()
+                    
+                    if contenuto_chat:
+                        # Costruiamo il pacchetto da inviare ai client
+                        msg_out = f"CHAT|{nickname}|{contenuto_chat}"
+                        
+                        # Invio a entrambi i giocatori
+                        for g in sessione_corrente[:2]: # g è (socket, nick, timer)
+                            try:
+                                g[0].send(msg_out.encode())
+                            except:
+                                pass
+                        
+                        # Log lato admin
+                        log_chat_sessione(sessione_corrente, nickname, contenuto_chat, pagina)
+                except Exception as e:
+                    print(f"Errore chat: {e}")
+                continue # Passa al prossimo ciclo
             # Gestione richiesta mosse valide
             if messaggio.startswith("MOVES|"):
                 if e_turno_bianco != sono_il_bianco:

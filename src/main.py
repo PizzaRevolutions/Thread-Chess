@@ -30,6 +30,8 @@ class ClientScacchi:
         self.testoTempoBianco = None
         self.testoTempoNero = None
         self.partitaTerminata = False
+        self.listaMessaggiChat = ft.ListView(expand=True, spacing=5, auto_scroll=True)
+        self.campoInputChat = ft.TextField(hint_text="Scrivi un messaggio...", expand=True, on_submit=self.invia_messaggio_chat)
 
         # Lista semplice di parole vietate lato client
         self.parole_vietate = [
@@ -127,6 +129,24 @@ class ClientScacchi:
                 ft.ElevatedButton("Entra in Coda", on_click=self.connetti_al_server),
             ], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER)
         )
+    
+    def invia_messaggio_chat(self, e):
+        testo = self.campoInputChat.value
+        if not testo or not self.socket_client:
+            return
+        
+        try:
+            # Pulisci il campo input
+            self.campoInputChat.value = ""
+            self.campoInputChat.focus()
+            self.pagina.update()
+            
+            # Invia al server
+            msg = f"CHAT|{testo}"
+            self.socket_client.send(msg.encode())
+        except Exception as ex:
+            print(f"Errore invio chat: {ex}")
+            self.gestisci_disconnessione()
 
     def nickname_valido(self, nickname: str) -> bool:
         """Valida il nickname: non vuoto, non troppo lungo, senza parolacce o simboli strani."""
@@ -388,6 +408,23 @@ class ClientScacchi:
                             messaggio = "Tempo scaduto."
                         self.mostra_schermata_fine_partita(messaggio)
                         break
+                elif datoRicevuto.startswith("CHAT|"):
+                    parti = datoRicevuto.split("|", 2)
+                    if len(parti) >= 3:
+                        nick_mittente = parti[1]
+                        msg_text = parti[2]
+                        
+                        # Formattazione diversa se sono io o l'avversario
+                        is_me = (nick_mittente == self.campoNickname.value)
+                        colore_testo = "green" if is_me else "orange"
+                        align = ft.MainAxisAlignment.END if is_me else ft.MainAxisAlignment.START
+                        
+                        bolla = ft.Row(
+                            [ft.Text(f"{nick_mittente}: {msg_text}", color=colore_testo, selectable=True)],
+                            alignment=align
+                        )
+                        self.listaMessaggiChat.controls.append(bolla)
+                        self.pagina.update()
                 else:
                     self.mossaAvversario(datoRicevuto)
                     
@@ -491,148 +528,108 @@ class ClientScacchi:
         self.pagina.clean()
         self.tempo_bianco = self.durataTimer
         self.tempo_nero = self.durataTimer
+        
+        # Pulisco la chat vecchia se c'era
+        self.listaMessaggiChat.controls.clear()
 
-        # Board esattamente 400x400
-        immagineScacchiera = ft.Image(
-            src=self.tema_scacchiera,
-            width=400,
-            height=400,
-            fit=ft.ImageFit.FILL
-        )
-
-        # Griglia perfettamente sovrapposta
-        colonnaGriglia = ft.Column(
-            spacing=0,
-            width=400,
-            height=400,
-            tight=True   # fondamentale
-        )
-
+        # --- Codice esistente per creare la scacchiera (immagineScacchiera, colonnaGriglia, ecc.) ---
+        # (Copia pure la parte di creazione di immagineScacchiera e colonnaGriglia dal tuo codice originale)
+        immagineScacchiera = ft.Image(src=self.tema_scacchiera, width=400, height=400, fit=ft.ImageFit.FILL)
+        colonnaGriglia = ft.Column(spacing=0, width=400, height=400, tight=True)
+        
         righe = range(7, -1, -1) if self.mioColore == chess.WHITE else range(8)
         colonne = range(8) if self.mioColore == chess.WHITE else range(7, -1, -1)
+        
+        # ... (Loop creazione caselle identico al file originale) ...
+        for riga_idx in righe:
+            rigaComponenti = []
+            for colonna_idx in colonne:
+                nomeCasella = chess.square_name(chess.square(colonna_idx, riga_idx))
+                slot = ft.Container(width=50, height=50, alignment=ft.alignment.center)
+                bersaglio = ft.GestureDetector(
+                    content=ft.DragTarget(group="scacchi", content=slot, on_accept=self.rilascioPezzo, data=nomeCasella),
+                    on_tap=lambda e, casella=nomeCasella: self.clickSuCasella(e, casella)
+                )
+                self.caselleGrafica[nomeCasella] = slot
+                rigaComponenti.append(bersaglio)
+            colonnaGriglia.controls.append(ft.Row(controls=rigaComponenti, spacing=0, width=400, height=50, tight=True))
 
-        # Funzione per chiudere (nascondere) il popup
+        # --- Container Scacchiera (Stack) ---
+        container_scacchiera = ft.Container(
+            ft.Stack([immagineScacchiera, colonnaGriglia], width=400, height=400),
+            border=ft.border.all(2, "white"),
+            padding=0
+        )
+
+        # --- Dialogo Abbandono (Codice esistente) ---
         def chiudi_popup(e):
             self.dialogo_abbandono.open = False
             self.pagina.update()
 
-        self.dialogo_abbandono = ft.AlertDialog(
-            modal=True,
-            title=ft.Text("Conferma Abbandono"),
-            content=ft.Text("Sei sicuro di voler abbandonare la partita? Perderai la gara."),
-            actions=[
-                ft.TextButton("No", on_click=chiudi_popup),
-                ft.TextButton("Sì, Abbandona", on_click=self.abbandona_partita),
-            ],
-            actions_alignment=ft.MainAxisAlignment.END,
-        )
-
-        # 1. Aggiungiamo il dialog all'overlay SUBITO, appena creiamo la schermata.
-        #    Così è già lì, pronto per essere mostrato.
-        self.pagina.overlay.append(self.dialogo_abbandono)
-
-        # Funzione per aprire (mostrare) il popup
         def apri_popup(e):
-            # Non facciamo append qui! È già nell'overlay.
             self.dialogo_abbandono.open = True
             self.pagina.update()
 
-        # --- Tasto Resa ---
-        bottone_resa = ft.IconButton(
-            icon="flag",
-            icon_color="red",
-            tooltip="Abbandona Partita",
-            on_click=apri_popup
+        self.dialogo_abbandono = ft.AlertDialog(
+            modal=True, title=ft.Text("Conferma Abbandono"),
+            content=ft.Text("Sei sicuro di voler abbandonare la partita?"),
+            actions=[ft.TextButton("No", on_click=chiudi_popup), ft.TextButton("Sì, Abbandona", on_click=self.abbandona_partita)],
+            actions_alignment=ft.MainAxisAlignment.END,
         )
+        self.pagina.overlay.append(self.dialogo_abbandono)
 
-        header_resa = ft.Row([bottone_resa], alignment=ft.MainAxisAlignment.START)
-
-
-        for riga_idx in righe:
-            rigaComponenti = []
-
-            for colonna_idx in colonne:
-                nomeCasella = chess.square_name(chess.square(colonna_idx, riga_idx))
-
-                # Questo container rappresenta esattamente la cella 50x50
-                slot = ft.Container(
-                    width=50,
-                    height=50,
-                    alignment=ft.alignment.center
-                )
-
-                bersaglio = ft.GestureDetector(
-                    content=ft.DragTarget(
-                        group="scacchi",
-                        content=slot,
-                        on_accept=self.rilascioPezzo,
-                        data=nomeCasella
-                    ),
-                    on_tap=lambda e, casella=nomeCasella: self.clickSuCasella(e, casella)
-                )
-
-                self.caselleGrafica[nomeCasella] = slot
-                rigaComponenti.append(bersaglio)
-
-            # Ogni riga deve essere esattamente 400px, senza respiro
-            colonnaGriglia.controls.append(
-                ft.Row(
-                    controls=rigaComponenti,
-                    spacing=0,
-                    width=400,
-                    height=50,
-                    tight=True    # vitale
-                )
-            )
-
-        self.etichettaStatoAttuale.value = (
-            "Tocca a te!" if self.mioTurno else "Attendi avversario..."
-        )
-
+        # --- UI Info e Controlli ---
+        bottone_resa = ft.IconButton(icon="flag", icon_color="red", tooltip="Abbandona", on_click=apri_popup)
         self.testoTempoBianco = ft.Text("", size=18, weight="bold", color="white")
-        self.testoTempoNero   = ft.Text("", size=18, weight="bold", color="white")
+        self.testoTempoNero = ft.Text("", size=18, weight="bold", color="white")
+        
+        info_panel = ft.Column([
+            ft.Row([bottone_resa, self.etichettaStatoAttuale], alignment=ft.MainAxisAlignment.START),
+            ft.Row([self.testoTempoBianco, self.testoTempoNero], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, width=400) if self.durataTimer > 0 else ft.Container(),
+            ft.Text(f"Tu sei: {'BIANCO' if self.mioColore == chess.WHITE else 'NERO'} | {self.nome_modalita_corrente()}")
+        ])
 
-        controlli_principali = [header_resa, self.etichettaStatoAttuale]
-
-        if self.durataTimer > 0:
-            controlli_principali.append(
-                ft.Row(
-                    [self.testoTempoBianco, self.testoTempoNero],
-                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-                    width=400
-                )
-            )
-
-    # Nessun padding tra board e overlay, altrimenti sfasa tutto
-        controlli_principali.append(
-            ft.Container(
-                ft.Stack(
-                    [   
-                        immagineScacchiera,
-                        colonnaGriglia
-                    ],
-                    width=400,
-                    height=400
+        # --- NUOVA SEZIONE CHAT (Colonna Destra) ---
+        colonna_chat = ft.Container(
+            content=ft.Column([
+                ft.Text("Chat Partita", weight="bold", size=16),
+                ft.Container(
+                    content=self.listaMessaggiChat,
+                    expand=True,
+                    border=ft.border.all(1, "grey"),
+                    border_radius=5,
+                    padding=5,
+                    bgcolor="#222222" # Sfondo scuro per la chat
                 ),
-                border=ft.border.all(2, "white"),
-                # tolgo il padding interno per non spostare la griglia
-                padding=0,
-                margin=ft.margin.symmetric(horizontal=12)
-            )
+                ft.Row([
+                    self.campoInputChat,
+                    ft.IconButton(icon="send", on_click=self.invia_messaggio_chat)
+                ])
+            ]),
+            width=250, # Larghezza fissa per la chat
+            height=500, # Altezza simile alla scacchiera + info
+            padding=10,
+            bgcolor="#1a1a1a",
+            border_radius=10
         )
 
-        testo_colore = f"Tu sei: {'BIANCO' if self.mioColore == chess.WHITE else 'NERO'}"
-        testo_modalita = f"Modalità: {self.nome_modalita_corrente()}"
-        controlli_principali.append(
-            ft.Text(f"{testo_colore} | {testo_modalita}")
+        # --- LAYOUT PRINCIPALE: Row (Scacchiera + Info) | Chat ---
+        layout_gioco = ft.Row(
+            [
+                ft.Column([info_panel, container_scacchiera], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+                ft.VerticalDivider(width=1, color="grey"),
+                colonna_chat
+            ],
+            alignment=ft.MainAxisAlignment.CENTER,
+            vertical_alignment=ft.CrossAxisAlignment.START
         )
 
-        self.pagina.add(*controlli_principali)
-
-        # Inizializza la UI del timer solo se la modalità prevede tempo
+        self.etichettaStatoAttuale.value = ("Tocca a te!" if self.mioTurno else "Attendi avversario...")
+        self.pagina.add(layout_gioco)
+        
         if self.durataTimer > 0:
             self.aggiorna_timer_ui(self.tempo_bianco, self.tempo_nero)
-
+            
         self.aggiornaPezzi()
         self.pagina.update()
 
