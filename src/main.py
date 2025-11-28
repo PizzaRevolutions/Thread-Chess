@@ -77,6 +77,26 @@ class ClientScacchi:
                 # È importante lasciare anche 'text' per la visualizzazione quando il menu è chiuso
                 text=text 
             )
+        # Selettore tema scacchiera
+        self.dropdownTemaScacchiera = ft.Dropdown(
+            label="Tema scacchiera",
+            width=250,
+            value="board.png",
+            options=[
+                opzione_con_immagine(key="board.png", text="Default", image_path="board.png"),
+                opzione_con_immagine(key="darkgreen_board.png", text="Verde Scuro", image_path="darkgreen_board.png"),
+                opzione_con_immagine(key="lightgreen_board.png", text="Verde chiaro", image_path="lightgreen_board.png"),
+                opzione_con_immagine(key="aqua_board.png", text="Acqua", image_path="aqua_board.png"),
+                opzione_con_immagine(key="brown_board.png", text="Marrone", image_path="brown_board.png"),
+                opzione_con_immagine(key="bw_board.png", text="Bianco e Nero", image_path="bw_board.png"),
+                opzione_con_immagine(key="gray_board.png", text="Grigio", image_path="gray_board.png"),
+                opzione_con_immagine(key="pink_board.png", text="Rosa", image_path="pink_board.png"),
+                opzione_con_immagine(key="purple_board.png", text="Viola", image_path="purple_board.png"),
+                opzione_con_immagine(key="red_board.png", text="Rosso", image_path="red_board.png"),
+                opzione_con_immagine(key="yellow_board.png", text="Giallo", image_path="yellow_board.png"),
+            ],
+            on_change=self.on_cambio_tema_scacchiera,
+        )
         # Selettore modalità / timer
         self.dropdownModalita = ft.Dropdown(
             label="Modalità di gioco",
@@ -102,6 +122,7 @@ class ClientScacchi:
             ft.Column([
                 ft.Text("Scacchi Online", size=40, weight="bold"),
                 self.campoNickname,
+                self.dropdownTemaScacchiera,
                 self.campoServer,
                 self.dropdownModalita,
                 self.etichettaStatoAttuale,
@@ -149,6 +170,11 @@ class ClientScacchi:
         self.valore_modalita_selezionata = valore
         durata = self.mappa_modalita_timer.get(valore, 600)
         self.durataTimer = durata
+    
+    def on_cambio_tema_scacchiera(self, evento: ft.ControlEvent):
+        """Aggiorna il tema scacchiera locale."""
+        self.tema_scacchiera = evento.control.value or "board.png"
+
 
     def nome_modalita_corrente(self) -> str:
         """Restituisce una descrizione leggibile della modalità in base al timer selezionato."""
@@ -471,7 +497,7 @@ class ClientScacchi:
 
         # Board esattamente 400x400
         immagineScacchiera = ft.Image(
-            src="board.png",
+            src=self.tema_scacchiera,
             width=400,
             height=400,
             fit=ft.ImageFit.FILL
