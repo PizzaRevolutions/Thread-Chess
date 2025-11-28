@@ -6,7 +6,7 @@ import re
 
 # Costanti di connessione (valori di default)
 INDIRIZZO_SERVER = "localhost"
-PORTA_SERVER = 8000
+PORTA_SERVER = 5000
 
 class ClientScacchi:
     def __init__(self, pagina: ft.Page):
@@ -56,7 +56,7 @@ class ClientScacchi:
         # Formato consigliato: "indirizzo:porta" (es. "192.168.1.10:5000").
         # Se lasciato vuoto, verranno usati i valori di default definiti sopra.
         self.campoServer = ft.TextField(
-            label="Server (es. 192.168.1.10:8000)",
+            label="Server (es. 192.168.1.10:5000)",
             width=250,
             text_align=ft.TextAlign.CENTER,
             value=f"{INDIRIZZO_SERVER}:{PORTA_SERVER}",
@@ -220,7 +220,7 @@ class ClientScacchi:
                     # Se non è specificata la porta, uso quella di default
                     host = testo_server
             except Exception:
-                self.etichettaStatoAttuale.value = "Formato server non valido. Usa es. 'indirizzo:8000'."
+                self.etichettaStatoAttuale.value = "Formato server non valido. Usa es. 'indirizzo:5000'."
                 self.pagina.update()
                 return
 
@@ -494,19 +494,19 @@ class ClientScacchi:
         self.tempo_bianco = self.durataTimer
         self.tempo_nero = self.durataTimer
 
-        # Board esattamente 800x800
+        # Board esattamente 400x400
         immagineScacchiera = ft.Image(
             src=self.tema_scacchiera,
-            width=800,
-            height=800,
+            width=400,
+            height=400,
             fit=ft.ImageFit.FILL
         )
 
         # Griglia perfettamente sovrapposta
         colonnaGriglia = ft.Column(
             spacing=0,
-            width=800,
-            height=800,
+            width=400,
+            height=400,
             tight=True   # fondamentale
         )
 
@@ -556,10 +556,10 @@ class ClientScacchi:
             for colonna_idx in colonne:
                 nomeCasella = chess.square_name(chess.square(colonna_idx, riga_idx))
 
-                # Questo container rappresenta esattamente la cella 100x100
+                # Questo container rappresenta esattamente la cella 50x50
                 slot = ft.Container(
-                    width=100,
-                    height=100,
+                    width=50,
+                    height=50,
                     alignment=ft.alignment.center
                 )
 
@@ -576,13 +576,13 @@ class ClientScacchi:
                 self.caselleGrafica[nomeCasella] = slot
                 rigaComponenti.append(bersaglio)
 
-
+            # Ogni riga deve essere esattamente 400px, senza respiro
             colonnaGriglia.controls.append(
                 ft.Row(
                     controls=rigaComponenti,
                     spacing=0,
-                    width=800,
-                    height=100,
+                    width=400,
+                    height=50,
                     tight=True    # vitale
                 )
             )
@@ -673,7 +673,7 @@ class ClientScacchi:
                 ft.Row(
                     [container_avversario, ft.Container(expand=True)],
                     alignment=ft.MainAxisAlignment.START,
-                    width=800,
+                    width=400,
                     spacing=10
                 )
             )
@@ -689,8 +689,8 @@ class ClientScacchi:
                         immagineScacchiera,
                         colonnaGriglia
                     ],
-                    width=800,
-                    height=800
+                    width=400,
+                    height=400
                 ),
                 border=ft.border.all(2, "white"),
                 padding=0,
@@ -704,7 +704,7 @@ class ClientScacchi:
                 ft.Row(
                     [ft.Container(expand=True), container_mio],
                     alignment=ft.MainAxisAlignment.END,
-                    width=800,
+                    width=400,
                     spacing=10
                 )
             )
@@ -768,20 +768,20 @@ class ClientScacchi:
 
                 # usa immagini diverse per capture vs normale
                 if is_capture:
-                    marker_control = ft.Image(src="selected_marker.png", width=96, height=96, fit=ft.ImageFit.CONTAIN)
+                    marker_control = ft.Image(src="selected_marker.png", width=48, height=48, fit=ft.ImageFit.CONTAIN)
                 else:
-                    marker_control = ft.Image(src="move_marker.png", width=96, height=96, fit=ft.ImageFit.CONTAIN)
+                    marker_control = ft.Image(src="move_marker.png", width=48, height=48, fit=ft.ImageFit.CONTAIN)
 
             contenitore.content = None
 
             if pezzo:
                 # Esempio nome file: wP.png (White Pawn) o bK.png (Black King)
                 nomeImgPezzo = f"{ 'w' if pezzo.color else 'b' }{pezzo.symbol().upper()}.png"
-                immaginePezzo = ft.Image(src=nomeImgPezzo, width=80, height=80)
+                immaginePezzo = ft.Image(src=nomeImgPezzo, width=40, height=40)
 
                 # Se c'è un marker, mettilo dietro al pezzo usando Stack
                 if pezzo.color == self.mioColore:
-                    immaginePezzoDrag = ft.Image(src=nomeImgPezzo, width=120, height=120)
+                    immaginePezzoDrag = ft.Image(src=nomeImgPezzo, width=60, height=60)
                     draggable = ft.Draggable(
                         group="scacchi",
                         content=immaginePezzo,
@@ -792,11 +792,11 @@ class ClientScacchi:
                         contenitore.content = ft.GestureDetector(
                             content=ft.Stack(
                                 controls=[
-                                    ft.Container(content=marker_control, width=100, height=100, alignment=ft.alignment.center),
-                                    ft.Container(content=draggable, width=100, height=100, alignment=ft.alignment.center),
+                                    ft.Container(content=marker_control, width=50, height=50, alignment=ft.alignment.center),
+                                    ft.Container(content=draggable, width=50, height=50, alignment=ft.alignment.center),
                                 ],
-                                width=100,
-                                height=100,
+                                width=50,
+                                height=50,
                             ),
                             on_tap=lambda e, casella=nomeCasella: self.clickSuPezzo(e, casella)
                         )
@@ -809,11 +809,11 @@ class ClientScacchi:
                     if marker_control:
                         contenitore.content = ft.Stack(
                             controls=[
-                                ft.Container(content=marker_control, width=100, height=100, alignment=ft.alignment.center),
-                                ft.Container(content=immaginePezzo, width=100, height=100, alignment=ft.alignment.center),
+                                ft.Container(content=marker_control, width=50, height=50, alignment=ft.alignment.center),
+                                ft.Container(content=immaginePezzo, width=50, height=50, alignment=ft.alignment.center),
                             ],
-                            width=100,
-                            height=100,
+                            width=50,
+                            height=50,
                         )
                     else:
                         contenitore.content = immaginePezzo
