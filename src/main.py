@@ -594,10 +594,40 @@ class ClientScacchi:
         self.testoTempoBianco = ft.Text("", size=18, weight="bold", color="black")
         self.testoTempoNero   = ft.Text("", size=18, weight="bold", color="black")
 
-        controlli_principali = [header_resa, self.etichettaStatoAttuale]
+        # Container laterale per i tasti (verticale, grigio)
+        pannello_tasti = ft.Container(
+            content=ft.Column(
+                [
+                    ft.IconButton(
+                        icon="flag",
+                        icon_color="red",
+                        tooltip="Abbandona Partita",
+                        on_click=apri_popup
+                    ),
+                    # Aggiungi altri tasti qui in futuro
+                ],
+                alignment=ft.MainAxisAlignment.START,
+                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                spacing=10
+            ),
+            bgcolor="#E0E0E0",
+            padding=10,
+            expand=False,
+            width=60
+        )
 
+        # Contenitore centrale con scacchiera e stato
+        colonna_centro = ft.Column(
+            [
+                self.etichettaStatoAttuale,
+            ],
+            alignment=ft.MainAxisAlignment.START,
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+            spacing=10
+        )
+
+        # Timer avversario sopra
         if self.durataTimer > 0:
-            # Avvolgi i testi timer in Container separati e stilizzati, con icona
             row_bianco = ft.Row(
                 [
                     ft.Icon(name="timer_outlined", color="black", size=20),
@@ -630,17 +660,29 @@ class ClientScacchi:
                 padding=10,
                 expand=True
             )
-            controlli_principali.append(
+
+            # Determina quale timer è mio e quale dell'avversario
+            if self.mioColore == chess.WHITE:
+                container_mio = container_bianco
+                container_avversario = container_nero
+            else:
+                container_mio = container_nero
+                container_avversario = container_bianco
+
+            colonna_centro.controls.append(
                 ft.Row(
-                    [container_bianco, container_nero],
-                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                    [container_avversario, ft.Container(expand=True)],
+                    alignment=ft.MainAxisAlignment.START,
                     width=400,
                     spacing=10
                 )
             )
+        else:
+            container_mio = None
+            container_avversario = None
 
-    # Nessun padding tra board e overlay, altrimenti sfasa tutto
-        controlli_principali.append(
+        # Aggiungi scacchiera
+        colonna_centro.controls.append(
             ft.Container(
                 ft.Stack(
                     [   
@@ -651,19 +693,37 @@ class ClientScacchi:
                     height=400
                 ),
                 border=ft.border.all(2, "white"),
-                # tolgo il padding interno per non spostare la griglia
                 padding=0,
                 margin=ft.margin.symmetric(horizontal=12)
             )
         )
 
+        # Aggiungi mio timer sotto la scacchiera a destra
+        if self.durataTimer > 0 and container_mio:
+            colonna_centro.controls.append(
+                ft.Row(
+                    [ft.Container(expand=True), container_mio],
+                    alignment=ft.MainAxisAlignment.END,
+                    width=400,
+                    spacing=10
+                )
+            )
+
         testo_colore = f"Tu sei: {'BIANCO' if self.mioColore == chess.WHITE else 'NERO'}"
         testo_modalita = f"Modalità: {self.nome_modalita_corrente()}"
-        controlli_principali.append(
+        colonna_centro.controls.append(
             ft.Text(f"{testo_colore} | {testo_modalita}")
         )
 
-        self.pagina.add(*controlli_principali)
+        # Layout principale: pannello tasti a sinistra + centro con scacchiera
+        layout_principale = ft.Row(
+            [pannello_tasti, colonna_centro],
+            alignment=ft.MainAxisAlignment.START,
+            vertical_alignment=ft.CrossAxisAlignment.START,
+            spacing=0
+        )
+
+        self.pagina.add(layout_principale)
 
         # Inizializza la UI del timer solo se la modalità prevede tempo
         if self.durataTimer > 0:
