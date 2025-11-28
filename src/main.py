@@ -591,17 +591,51 @@ class ClientScacchi:
             "Tocca a te!" if self.mioTurno else "Attendi avversario..."
         )
 
-        self.testoTempoBianco = ft.Text("", size=18, weight="bold", color="white")
-        self.testoTempoNero   = ft.Text("", size=18, weight="bold", color="white")
+        self.testoTempoBianco = ft.Text("", size=18, weight="bold", color="black")
+        self.testoTempoNero   = ft.Text("", size=18, weight="bold", color="black")
 
         controlli_principali = [header_resa, self.etichettaStatoAttuale]
 
         if self.durataTimer > 0:
+            # Avvolgi i testi timer in Container separati e stilizzati, con icona
+            row_bianco = ft.Row(
+                [
+                    ft.Icon(name="timer_outlined", color="black", size=20),
+                    self.testoTempoBianco
+                ],
+                alignment=ft.MainAxisAlignment.CENTER,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                spacing=5
+            )
+            row_nero = ft.Row(
+                [
+                    ft.Icon(name="timer_outlined", color="black", size=20),
+                    self.testoTempoNero
+                ],
+                alignment=ft.MainAxisAlignment.CENTER,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                spacing=5
+            )
+            container_bianco = ft.Container(
+                content=row_bianco,
+                bgcolor="#DCFEFF", 
+                border_radius=8,
+                padding=10,
+                expand=True
+            )
+            container_nero = ft.Container(
+                content=row_nero,
+                bgcolor="#DCFEFF",
+                border_radius=8,
+                padding=10,
+                expand=True
+            )
             controlli_principali.append(
                 ft.Row(
-                    [self.testoTempoBianco, self.testoTempoNero],
+                    [container_bianco, container_nero],
                     alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-                    width=400
+                    width=400,
+                    spacing=10
                 )
             )
 
@@ -742,9 +776,9 @@ class ClientScacchi:
         self.tempo_bianco = tempo_bianco
         self.tempo_nero = tempo_nero
         if self.testoTempoBianco:
-            self.testoTempoBianco.value = f"Tempo Bianco: {self.formatta_tempo(tempo_bianco)}"
+            self.testoTempoBianco.value = f"{self.formatta_tempo(tempo_bianco)}"
         if self.testoTempoNero:
-            self.testoTempoNero.value = f"Tempo Nero: {self.formatta_tempo(tempo_nero)}"
+            self.testoTempoNero.value = f"{self.formatta_tempo(tempo_nero)}"
         if self.testoTempoBianco or self.testoTempoNero:
             self.pagina.update()
 
