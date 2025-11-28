@@ -80,7 +80,6 @@ class ClientScacchi:
         self.dropdownTemaScacchiera = ft.Dropdown(
             label="Tema scacchiera",
             width=250,
-            value="board.png",
             options=[
                 opzione_con_immagine(key="board.png", text="Default", image_path="board.png"),
                 opzione_con_immagine(key="darkgreen_board.png", text="Verde Scuro", image_path="darkgreen_board.png"),
@@ -171,7 +170,6 @@ class ClientScacchi:
         self.durataTimer = durata
     
     def on_cambio_tema_scacchiera(self, evento: ft.ControlEvent):
-        """Aggiorna il tema scacchiera locale."""
         self.tema_scacchiera = evento.control.value or "board.png"
 
 
