@@ -2,12 +2,17 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
+# Copia requirements
 COPY requirements.txt .
+
+# Installa dipendenze
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Copia il progetto
 COPY . .
 
-EXPOSE 8000
+# Esponi porta per il server
+EXPOSE 5000
 
-ENV FLET_FORCE_WEB_SERVER=true
-CMD ["python", "-m", "flet", "src/server.py"]
+# Avvia il server in modalità web
+CMD ["flet", "run", "--web", "src/server.py"]
