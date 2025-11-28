@@ -31,7 +31,7 @@ class ClientScacchi:
         self.testoTempoNero = None
         self.partitaTerminata = False
 
-        # Lista semplice di parole vietate (in minuscolo); personalizzabile
+        # Lista semplice di parole vietate lato client
         self.parole_vietate = [
             "cazzo",
             "merda",
