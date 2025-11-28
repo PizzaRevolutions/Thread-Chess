@@ -83,8 +83,8 @@ class ClientScacchi:
             width=250,
             value=self.valore_modalita_selezionata,
             options=[
-                opzione_con_immagine(key="600", text="Rapid (10 minuti)", image_path="rapid.png"),
                 opzione_con_immagine(key="1200", text="Classic (20 minuti)", image_path="classic.png"),
+                opzione_con_immagine(key="600", text="Rapid (10 minuti)", image_path="rapid.png"),
                 opzione_con_immagine(key="300", text="Blitz (5 minuti)", image_path="blitz.png"),
                 opzione_con_immagine(key="180", text="Blitz (3 minuti)", image_path="blitz.png"),
                 opzione_con_immagine(key="60", text="Bullet (1 minuto)", image_path="bullet.png"),
