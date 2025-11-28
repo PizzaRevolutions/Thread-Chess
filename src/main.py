@@ -119,6 +119,7 @@ class ClientScacchi:
     def schermataLogin(self):
         self.pagina.overlay.clear()
         self.pagina.clean()
+        self.etichettaStatoAttuale.value = ""  # Resetta il testo vecchio
         self.pagina.add(
             ft.Column([
                 ft.Text("Scacchi Online", size=40, weight="bold"),
