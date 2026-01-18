@@ -1,4 +1,134 @@
-# ♟️ Scacchi Online Multiplayer (Python + Flet)
+# ♟️ Online Multiplayer Chess (Python + Flet) 🇬🇧
+
+A comprehensive cross-platform application for playing multiplayer chess over a local area network (TCP/IP). The project implements a **Client-Server** architecture, utilizing **Flet** for a modern graphical interface and **Multithreading** for managing simultaneous connections.
+
+## 📥 Download and Installation (Play Now!)
+
+Don't want to install Python or configure an environment? Download the executable files for your operating system directly from the GitHub **Releases** section.
+
+[👉 **GO TO DOWNLOADS (RELEASES)](https://github.com/PizzaRevolutions/Thread-Chess/releases)**
+
+### What to download:
+
+* **🖥️ Windows:** Download the `.exe` file and run it on your device.
+* **📱 Android:** Download the `.apk` file and install it on your device.
+
+---
+
+## 🚀 Key Features
+
+* **Cross-Platform:** Play on Windows, Android, macOS, and Linux thanks to Flet.
+* **Client-Server Architecture:** Uses TCP Sockets for real-time communication.
+* **Graphical User Interface (GUI):** Modern and responsive, supporting **Drag and Drop** for pieces.
+* **Multithreading:**
+* The **Server** handles each client in a separate thread.
+* The **Client** listens for opponent moves in the background without freezing the UI.
+
+
+* **Chess Rules:** Full support (Castling, En Passant, Promotion) validated by the `python-chess` library.
+
+---
+
+## ▶️ How to Start (Using Executables)
+
+If you downloaded the files from the Releases section:
+
+1. **Launch the Server:** Open the `Server.exe` file. You will see a window or terminal indicating it is waiting for connections.
+2. **Launch the Clients:**
+* Run the application on two different devices or in two separate windows.
+* Enter a Nickname and connect.
+
+
+3. **Play:** Once two players are connected, the game starts automatically with random color assignment.
+
+> **Note for Android/Local Network:** Ensure the Client knows the IP address of the PC where the Server is running if you are playing on different devices (the server listens on `localhost` by default).
+
+---
+
+## 🛠️ Development & Running from Source
+
+If you are a developer or want to modify the code, follow this procedure.
+
+### 1. Prerequisites
+
+* Python 3.7 or higher.
+* Git (optional, to clone the repo).
+
+### 2. Installation
+
+Clone the repository and create a virtual environment:
+
+```bash
+# Clone the repo (or download the zip)
+git clone https://github.com/your-username/your-repo.git
+cd your-repo
+
+# Create Virtual Environment
+python -m venv .venv
+
+# Activate Virtual Environment
+# Windows:
+.venv\Scripts\activate
+# Mac/Linux:
+source .venv/bin/activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+```
+
+### 3. Launch (Development Mode)
+
+Open **three** separate terminals within the `src` folder:
+
+**Terminal 1 (Server):**
+
+```bash
+flet run server.py
+
+```
+
+*You should see: "SERVER STARTED AT..."*
+
+**Terminal 2 (Player A):**
+
+```bash
+flet run
+
+```
+
+**Terminal 3 (Player B):**
+
+```bash
+flet run
+
+```
+
+---
+
+## 🧠 Technical Details
+
+### Socket Management and Threading
+
+The system uses blocking sockets managed via threading to keep the GUI fluid:
+
+* **Server:** Uses `threading.Thread` for every `accept()` call, allowing multiple simultaneous connections and independent game management.
+* **Client:** Runs a `daemon` thread (`network_loop`) continuously listening with `socket.recv()`. Upon receiving a packet, it updates the board state via Flet's `page.update()`.
+
+### Server-Authoritative Logic
+
+To prevent cheating and desynchronization, the logic follows an authoritative model:
+
+1. **Client A** sends a move (e.g., "e2e4").
+2. **Server** receives and validates it via `python-chess` on its own board instance.
+3. **If valid:** Updates the state and broadcasts the move to **Client B**.
+4. **If invalid:** Rejects the move and forces a rollback on **Client A**.
+
+---
+
+*This project was created for educational purposes to study Python, Socket Programming, and GUI Development.*
+
+# ♟️ Scacchi Online Multiplayer (Python + Flet) 🇮🇹
 
 Un'applicazione completa cross-platform per giocare a scacchi in multiplayer via rete locale (TCP/IP). Il progetto implementa un'architettura **Client-Server**, utilizzando **Flet** per l'interfaccia grafica moderna e **Multithreading** per la gestione delle connessioni simultanee.
 
