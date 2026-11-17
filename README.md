@@ -31,6 +31,24 @@ Don't want to install Python or configure an environment? Download the executabl
 
 * **Chess Rules:** Full support (Castling, En Passant, Promotion) validated by the `python-chess` library.
 
+## System Architecture
+
+```mermaid
+sequenceDiagram
+    participant C1 as Client 1 (White)
+    participant S as Multithreaded Server
+    participant C2 as Client 2 (Black)
+
+    C1->>S: TCP Socket Connection
+    C2->>S: TCP Socket Connection
+    Note over S: Dedicated Thread / Session Spawned
+    S-->>C1: Match Ready (Assign White)
+    S-->>C2: Match Ready (Assign Black)
+    C1->>S: Send Move Payload (e.g., e2 -> e4)
+    S->>S: Validate & Sync Board State
+    S-->>C2: Broadcast Move & Switch Turn
+```
+
 ---
 
 ## ▶️ How to Start (Using Executables)
