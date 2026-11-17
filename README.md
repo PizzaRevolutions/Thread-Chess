@@ -176,6 +176,24 @@ Non vuoi installare Python o configurare l'ambiente? Scarica direttamente i file
     *   Il Client ascolta le mosse dell'avversario in background senza bloccare la grafica.
 *   **Regole Scacchistiche:** Supporto completo (Arrocco, En Passant, Promozione) validato da `python-chess`.
 
+## Architettura di funzionamento
+
+```mermaid
+sequenceDiagram
+    participant C1 as Client 1 (Bianco)
+    participant S as Server Multithread
+    participant C2 as Client 2 (Nero)
+
+    C1->>S: Connessione al socket TCP
+    C2->>S: Connessione al socket TCP
+    Note over S: Creazione di un Thread dedicato
+    S-->>C1: Creazione partita (Assegnare il bianco)
+    S-->>C2: Creazione partita (Assegnare il nero)
+    C1->>S: Manda una mossa (es. e2 -> e4)
+    S->>S: Valida e fai il sync della mossa
+    S-->>C2: Informa della mossa e passa al turno successivo
+```
+
 ---
 
 ## ▶️ Come Avviare il Gioco (Dagli Eseguibili)
