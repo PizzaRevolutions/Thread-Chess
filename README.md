@@ -1,3 +1,7 @@
+![Architecture](https://img.shields.io/badge/Architecture-Multithreaded_TCP_Sockets-blue?style=for-the-badge)
+![Status](https://img.shields.io/badge/Status-Completed-success?style=for-the-badge)
+![License](https://img.shields.io/badge/License-MIT-lightgrey?style=for-the-badge)
+
 # ♟️ Online Multiplayer Chess (Python + Flet) 🇬🇧
 
 A comprehensive cross-platform application for playing multiplayer chess over a local area network (TCP/IP). The project implements a **Client-Server** architecture, utilizing **Flet** for a modern graphical interface and **Multithreading** for managing simultaneous connections.
